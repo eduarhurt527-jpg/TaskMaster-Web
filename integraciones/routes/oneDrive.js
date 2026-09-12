@@ -17,7 +17,7 @@ router.post('/api/microsoft/onedrive/vincular', async (req, res) => {
     const { tarea_id, url } = req.body;
     if (!tarea_id || !url) return res.status(400).json({ success: false, error: 'tarea_id y url son obligatorios.' });
 
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const shareId = codificarShareId(url);
 
     const gres = await fetch(

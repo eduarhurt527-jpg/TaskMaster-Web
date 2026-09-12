@@ -14,6 +14,7 @@ import googleDriveRouter from './routes/googleDrive.js';
 import oneDriveRouter from './routes/oneDrive.js';
 import teamsRouter from './routes/teams.js';
 import classroomRouter from './routes/classroom.js';
+import { requireMainSession } from './lib/mainSession.js';
 
 dotenv.config();
 
@@ -21,10 +22,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 3002;
 
-app.use(cors());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:3002').split(',').map(value => value.trim());
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use('/api', requireMainSession);
 app.use('/api', tareasRouter);
 app.use('/api', emailRouter);
 app.use('/api', icsRouter);

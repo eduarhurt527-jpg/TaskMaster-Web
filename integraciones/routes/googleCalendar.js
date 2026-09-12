@@ -10,12 +10,12 @@ router.post('/api/google/calendar/evento', async (req, res) => {
     if (!tarea_id) return res.status(400).json({ success: false, error: 'tarea_id es obligatorio.' });
 
     const base = process.env.MAIN_API_URL || 'http://localhost:3000';
-    const r = await fetch(`${base}/api/tareas`);
+    const r = await fetch(`${base}/api/tareas`, { headers: { cookie: req.headers.cookie || '' } });
     const data = await r.json();
     const tarea = (data.tareas || []).find(t => Number(t.id) === Number(tarea_id));
     if (!tarea) return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
 
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
 
     const inicio = new Date(tarea.fecha_limite);
     const fin = new Date(inicio.getTime() + 30 * 60 * 1000);

@@ -53,7 +53,7 @@ class AuthView {
     this.open();
   }
 
-  /** Simula login con proveedor (Google). En producción usar OAuth real. */
+  /** Lleva al centro de integraciones; no suplanta la autenticación de Google. */
   openGoogleMode() {
     this.mode = 'google';
     this.$modeLabel.textContent = 'Google';
@@ -70,7 +70,8 @@ class AuthView {
 
   async loginWithProvider(provider) {
     if (provider === 'google') {
-      this.openGoogleMode();
+      document.querySelector('.nav-btn[data-view="integrations"]')?.click();
+      this.app.showToast('Conecta Google desde tu cuenta de forma segura', 'info');
     } else {
       this.openMode('login');
     }
@@ -155,14 +156,23 @@ class AuthView {
     }
   }
 
-  _restoreUser() {
-    const u = localStorage.getItem('tm_user');
-    if (u) {
-      try { const user = JSON.parse(u); this.app.setUser(user); } catch(e){}
+  async _restoreUser() {
+    try {
+      const response = await fetch('/api/session', { credentials: 'include' });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem('tm_user', JSON.stringify(data.user));
+        this.app.setUser(data.user);
+      } else {
+        localStorage.removeItem('tm_user');
+      }
+    } catch (error) {
+      localStorage.removeItem('tm_user');
     }
   }
 
   async logout() {
+    await fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => null);
     localStorage.removeItem('tm_user');
     this.app.setUser(null);
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada

@@ -14,7 +14,7 @@ async function classroomGet(path, accessToken) {
 
 router.get('/api/google/classroom/cursos', async (req, res) => {
   try {
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const data = await classroomGet('/courses?courseStates=ACTIVE', accessToken);
     res.json({ success: true, cursos: (data.courses || []).map(c => ({ id: c.id, nombre: c.name })) });
   } catch (error) {
@@ -26,7 +26,7 @@ router.get('/api/google/classroom/tareas', async (req, res) => {
   try {
     const { curso_id } = req.query;
     if (!curso_id) return res.status(400).json({ success: false, error: 'curso_id es obligatorio.' });
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const data = await classroomGet(`/courses/${curso_id}/courseWork`, accessToken);
     const tareas = (data.courseWork || []).map(t => ({
       id: t.id,
@@ -50,7 +50,7 @@ router.post('/api/google/classroom/importar', async (req, res) => {
     const base = process.env.MAIN_API_URL || 'http://localhost:3000';
     const r = await fetch(`${base}/api/tareas`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', cookie: req.headers.cookie || '' },
       body: JSON.stringify({
         titulo,
         descripcion: descripcion || '',
