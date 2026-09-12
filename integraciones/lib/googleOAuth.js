@@ -11,7 +11,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ');
 
-export function construirUrlAutorizacion() {
+export function construirUrlAutorizacion(state) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI,
@@ -19,11 +19,12 @@ export function construirUrlAutorizacion() {
     scope: SCOPES,
     access_type: 'offline',
     prompt: 'consent',
+    state,
   });
   return `${AUTH_URL}?${params.toString()}`;
 }
 
-export async function intercambiarCodigo(code) {
+export async function intercambiarCodigo(usuarioId, code) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -38,7 +39,7 @@ export async function intercambiarCodigo(code) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || 'Error intercambiando código de Google');
 
-  await guardarTokens('google', {
+  await guardarTokens(usuarioId, 'google', {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expira_en: Date.now() + data.expires_in * 1000,
@@ -46,8 +47,8 @@ export async function intercambiarCodigo(code) {
   return data;
 }
 
-async function refrescarToken() {
-  const guardado = await leerTokens('google');
+async function refrescarToken(usuarioId) {
+  const guardado = await leerTokens(usuarioId, 'google');
   if (!guardado || !guardado.refresh_token) throw new Error('Google no está conectado.');
 
   const res = await fetch(TOKEN_URL, {
@@ -63,7 +64,7 @@ async function refrescarToken() {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || 'Error refrescando token de Google');
 
-  await guardarTokens('google', {
+  await guardarTokens(usuarioId, 'google', {
     access_token: data.access_token,
     refresh_token: guardado.refresh_token,
     expira_en: Date.now() + data.expires_in * 1000,
@@ -71,11 +72,11 @@ async function refrescarToken() {
   return data.access_token;
 }
 
-export async function obtenerAccessToken() {
-  const guardado = await leerTokens('google');
+export async function obtenerAccessToken(usuarioId) {
+  const guardado = await leerTokens(usuarioId, 'google');
   if (!guardado || !guardado.refresh_token) throw new Error('Google no está conectado. Ve a la tarjeta de Google y haz clic en Conectar.');
   if (guardado.expira_en && Date.now() < guardado.expira_en - 60_000) {
     return guardado.access_token;
   }
-  return refrescarToken();
+  return refrescarToken(usuarioId);
 }

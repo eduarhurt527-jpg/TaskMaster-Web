@@ -13,6 +13,7 @@ class App {
     this.modalView     = new ModalView(taskViewModel);
     this.pomodoroView  = new PomodoroView(taskViewModel);
     this.authView      = new AuthView(this);
+    this.integrationsView = new IntegrationsView(this);
 
     this.user = null;
 
@@ -214,6 +215,7 @@ class App {
 
     if (vista === 'overview') this.dashboardView.render();
     if (vista === 'home')      this.homeView.render();
+    if (vista === 'integrations') this.integrationsView.refresh();
   }
 
 

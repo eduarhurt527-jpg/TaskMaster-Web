@@ -3,16 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TaskMaster - Avance 100% Completo</title>
+  <title>TaskMaster — Organiza, enfócate y avanza</title>
   <link rel="stylesheet" href="assets/css/main.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/professional.css" />
+  <link rel="icon" href="assets/img/branding/taskmaster-mark.svg" type="image/svg+xml" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
 
   <header class="app-header">
     <div class="header-inner">
       <div class="brand">
-        <img src="assets/img/logo.svg" alt="TaskMaster" class="brand-logo" />
+        <img src="assets/img/branding/taskmaster-mark.svg" alt="" class="brand-logo" />
         <div>
           <p class="brand-label">TaskMaster</p>
           <span class="brand-subtitle">Organiza tu día con enfoque</span>
@@ -41,8 +43,9 @@
       </div>
     </div>
     <div class="header-nav">
-      <button class="nav-btn active" data-view="home">Inicio</button>
-      <button class="nav-btn" data-view="overview">Mi Panel</button>
+      <button class="nav-btn active" data-view="home"><span aria-hidden="true">⌂</span> Inicio</button>
+      <button class="nav-btn" data-view="overview"><span aria-hidden="true">▦</span> Mi panel</button>
+      <button class="nav-btn" data-view="integrations"><span aria-hidden="true">◇</span> Integraciones</button>
     </div>
     <div class="header-summary">
       <div class="stat-card">
@@ -285,6 +288,75 @@
       </div>
     </section>
 
+    <!-- Centro de integraciones de la cuenta -->
+    <section id="view-integrations" class="view integrations-view" aria-labelledby="integrations-title">
+      <div class="integrations-hero">
+        <div>
+          <p class="section-label">CUENTA · INTEGRACIONES</p>
+          <h1 id="integrations-title">Tu trabajo, conectado</h1>
+          <p>Reúne archivos, calendarios, clases y equipos en un solo lugar. Conecta únicamente los servicios que necesites.</p>
+        </div>
+        <button class="btn btn--secondary" id="btn-refresh-integrations" type="button">Actualizar estados</button>
+      </div>
+
+      <div class="integration-summary" aria-live="polite">
+        <div><strong id="integration-connected-count">0</strong><span>conexiones activas</span></div>
+        <div><strong>8</strong><span>servicios disponibles</span></div>
+        <p id="integration-global-status">Comprobando el servicio de integraciones…</p>
+      </div>
+
+      <div class="integration-filters" aria-label="Filtrar integraciones">
+        <button class="integration-filter active" data-provider="all" type="button">Todas</button>
+        <button class="integration-filter" data-provider="google" type="button">Google</button>
+        <button class="integration-filter" data-provider="microsoft" type="button">Microsoft</button>
+        <button class="integration-filter" data-provider="communication" type="button">Comunicación</button>
+      </div>
+
+      <div class="integrations-grid" id="integrations-grid">
+        <article class="integration-card" data-provider="google" data-account="google">
+          <img src="integraciones/public/assets/icons/googledrive.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Google Drive</h2><span class="connection-badge">Comprobando</span></div><p>Vincula documentos y abre tus archivos desde cada tarea.</p><small>Permiso: archivos creados o elegidos por ti.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--primary connect-action" href="http://localhost:3002/auth/google">Conectar</a><a class="btn btn--ghost use-action" href="http://localhost:3002/#drive" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="google" data-account="google">
+          <img src="integraciones/public/assets/icons/googlecalendar.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Google Calendar</h2><span class="connection-badge">Comprobando</span></div><p>Convierte fechas de entrega en eventos de calendario.</p><small>Permiso: crear y administrar eventos.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--primary connect-action" href="http://localhost:3002/auth/google">Conectar</a><a class="btn btn--ghost use-action" href="http://localhost:3002/#calendar" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="google" data-account="google">
+          <img src="integraciones/public/assets/icons/googleclassroom.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Google Classroom</h2><span class="connection-badge">Comprobando</span></div><p>Consulta cursos e importa trabajos como tareas organizadas.</p><small>Permiso: lectura de cursos y actividades.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--primary connect-action" href="http://localhost:3002/auth/google">Conectar</a><a class="btn btn--ghost use-action" href="http://localhost:3002/#classroom" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="google communication" data-account="google">
+          <img src="integraciones/public/assets/icons/gmail.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Gmail</h2><span class="connection-badge">Disponible</span></div><p>Recibe recordatorios de tareas importantes por correo.</p><small>El envío utiliza el servicio configurado por TaskMaster.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--ghost use-action is-enabled" href="http://localhost:3002/#email" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="microsoft" data-account="microsoft">
+          <img src="assets/img/integrations/onedrive.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>OneDrive</h2><span class="connection-badge">Comprobando</span></div><p>Vincula archivos de Microsoft 365 con tus actividades.</p><small>Permiso: lectura y escritura de archivos.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--primary connect-action" href="http://localhost:3002/auth/microsoft">Conectar</a><a class="btn btn--ghost use-action" href="http://localhost:3002/#onedrive" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="microsoft communication" data-account="microsoft">
+          <img src="assets/img/integrations/teams.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Microsoft Teams</h2><span class="connection-badge">Comprobando</span></div><p>Comparte tareas y recordatorios con equipos y canales.</p><small>Permiso: equipos, canales y envío de mensajes.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--primary connect-action" href="http://localhost:3002/auth/microsoft">Conectar</a><a class="btn btn--ghost use-action" href="http://localhost:3002/#teams" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="communication">
+          <img src="integraciones/public/assets/icons/brevo.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Brevo</h2><span class="connection-badge connected">Configurado</span></div><p>Envía avisos de vencimiento desde el servicio de correo.</p><small>Requiere BREVO_API_KEY en el servidor.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--ghost use-action is-enabled" href="http://localhost:3002/#email" target="_blank" rel="noopener">Usar</a></div>
+        </article>
+        <article class="integration-card" data-provider="calendar">
+          <img src="integraciones/public/assets/icons/generico.svg" alt="" />
+          <div class="integration-card__body"><div class="integration-card__heading"><h2>Archivo ICS</h2><span class="connection-badge connected">Disponible</span></div><p>Exporta tus tareas a cualquier calendario compatible.</p><small>No necesita conectar una cuenta.</small></div>
+          <div class="integration-card__actions"><a class="btn btn--ghost use-action is-enabled" href="http://localhost:3002/#ics" target="_blank" rel="noopener">Exportar</a></div>
+        </article>
+      </div>
+      <aside class="privacy-note"><strong>Tú mantienes el control.</strong><span>TaskMaster solicita solo los permisos necesarios. Puedes reconectar o retirar el acceso desde cada proveedor.</span></aside>
+    </section>
+
   </main>
 
   <!-- Modal Nueva/Editar Tarea -->
@@ -496,6 +568,7 @@
   <script src="assets/js/view/ModalView.js"></script>
   <script src="assets/js/view/PomodoroView.js"></script>
   <script src="assets/js/view/AuthView.js"></script>
+  <script src="assets/js/view/IntegrationsView.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>

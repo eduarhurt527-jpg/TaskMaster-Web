@@ -20,7 +20,7 @@ router.post('/api/google/drive/vincular', async (req, res) => {
     const fileId = extraerFileId(url);
     if (!fileId) return res.status(400).json({ success: false, error: 'No se reconoce ese link de Google Drive.' });
 
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const gres = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,webViewLink,iconLink`,
       { headers: { Authorization: `Bearer ${accessToken}` } }

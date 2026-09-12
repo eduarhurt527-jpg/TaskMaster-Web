@@ -243,3 +243,6 @@ body {
   font-size: 12px;
   font-weight: 600;
 }
+html { scroll-behavior: smooth; }
+.card[id] { scroll-margin-top: 24px; }
+.card[id]:target { outline: 3px solid rgba(79, 70, 229, .28); outline-offset: 4px; }

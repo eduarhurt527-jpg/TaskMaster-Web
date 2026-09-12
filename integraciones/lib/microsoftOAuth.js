@@ -12,7 +12,7 @@ const SCOPES = [
   'ChannelMessage.Send',
 ].join(' ');
 
-export function construirUrlAutorizacion() {
+export function construirUrlAutorizacion(state) {
   const params = new URLSearchParams({
     client_id: process.env.AZURE_CLIENT_ID,
     redirect_uri: process.env.AZURE_REDIRECT_URI,
@@ -20,11 +20,12 @@ export function construirUrlAutorizacion() {
     response_mode: 'query',
     scope: SCOPES,
     prompt: 'select_account',
+    state,
   });
   return `${AUTH_URL}?${params.toString()}`;
 }
 
-export async function intercambiarCodigo(code) {
+export async function intercambiarCodigo(usuarioId, code) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -40,7 +41,7 @@ export async function intercambiarCodigo(code) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || 'Error intercambiando código de Microsoft');
 
-  await guardarTokens('microsoft', {
+  await guardarTokens(usuarioId, 'microsoft', {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expira_en: Date.now() + data.expires_in * 1000,
@@ -48,8 +49,8 @@ export async function intercambiarCodigo(code) {
   return data;
 }
 
-async function refrescarToken() {
-  const guardado = await leerTokens('microsoft');
+async function refrescarToken(usuarioId) {
+  const guardado = await leerTokens(usuarioId, 'microsoft');
   if (!guardado || !guardado.refresh_token) throw new Error('Microsoft no está conectado.');
 
   const res = await fetch(TOKEN_URL, {
@@ -66,7 +67,7 @@ async function refrescarToken() {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || 'Error refrescando token de Microsoft');
 
-  await guardarTokens('microsoft', {
+  await guardarTokens(usuarioId, 'microsoft', {
     access_token: data.access_token,
     refresh_token: data.refresh_token || guardado.refresh_token,
     expira_en: Date.now() + data.expires_in * 1000,
@@ -74,11 +75,11 @@ async function refrescarToken() {
   return data.access_token;
 }
 
-export async function obtenerAccessToken() {
-  const guardado = await leerTokens('microsoft');
+export async function obtenerAccessToken(usuarioId) {
+  const guardado = await leerTokens(usuarioId, 'microsoft');
   if (!guardado || !guardado.refresh_token) throw new Error('Microsoft no está conectado. Ve a la tarjeta de OneDrive/Teams y haz clic en Conectar.');
   if (guardado.expira_en && Date.now() < guardado.expira_en - 60_000) {
     return guardado.access_token;
   }
-  return refrescarToken();
+  return refrescarToken(usuarioId);
 }

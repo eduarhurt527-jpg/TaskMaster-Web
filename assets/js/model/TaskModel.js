@@ -34,9 +34,7 @@ class TaskModel {
     // ── GET: todas las tareas ─────────────────────────────────────────────────
     async getAll() {
         try {
-            const uid = this._userId();
-            const url = uid ? `${this.API_TAREAS}?usuario_id=${uid}` : this.API_TAREAS;
-            const res  = await fetch(url, { credentials: 'include' });
+            const res  = await fetch(this.API_TAREAS, { credentials: 'include' });
             const data = await res.json();
             if (res.ok && data.success) {
                 this._tareas = data.tareas;
@@ -66,7 +64,7 @@ class TaskModel {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ ...tarea, usuario_id: this._userId() })
+                body: JSON.stringify(tarea)
             });
             const data = await res.json();
             if (res.ok && data.success) {

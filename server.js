@@ -4,6 +4,7 @@ import { json } from 'express';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
+import session from 'express-session';
 import dotenv from 'dotenv';
 import path from 'path';
 import { readFileSync } from 'fs';
@@ -17,9 +18,35 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET es obligatorio en producción.');
+}
+
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:3002')
+  .split(',').map(origin => origin.trim()).filter(Boolean);
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(json());
+app.set('trust proxy', 1);
+app.use(session({
+  name: 'tm.sid',
+  secret: process.env.SESSION_SECRET || 'development-only-change-this-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 8,
+  },
+}));
 app.use(express.static(path.join(__dirname, '/')));
+
+function requireAuth(req, res, next) {
+  if (!req.session?.userId) {
+    return res.status(401).json({ success: false, error: 'Inicia sesión para continuar.' });
+  }
+  next();
+}
 
 const serviceAccountPath = path.resolve(
   __dirname,
@@ -130,7 +157,7 @@ app.get('/api/categorias', async (req, res) => {
 
 // ── Tareas ───────────────────────────────────────────────────────────────
 
-app.get('/api/tareas', async (req, res) => {
+app.get('/api/tareas', requireAuth, async (req, res) => {
   try {
     const [tareasSnap, materiasSnap] = await Promise.all([
       db.collection('tareas').get(),
@@ -145,7 +172,7 @@ app.get('/api/tareas', async (req, res) => {
 
     // Filtrar por usuario cuando el cliente lo indica; las tareas antiguas
     // (usuario_id null, creadas antes del soporte multiusuario) siguen visibles
-    const usuarioId = req.query.usuario_id ? Number(req.query.usuario_id) : null;
+    const usuarioId = Number(req.session.userId);
 
     const tareas = tareasSnap.docs
       .map(d => {
@@ -157,7 +184,7 @@ app.get('/api/tareas', async (req, res) => {
           materia_color: m ? m.color : null,
         };
       })
-      .filter(t => usuarioId === null || t.usuario_id == null || t.usuario_id === usuarioId)
+      .filter(t => t.usuario_id === usuarioId)
       .sort((a, b) => {
         if (a.completada !== b.completada) return a.completada - b.completada;
         return new Date(a.fecha_limite) - new Date(b.fecha_limite);
@@ -169,12 +196,12 @@ app.get('/api/tareas', async (req, res) => {
   }
 });
 
-app.post('/api/tareas', async (req, res) => {
+app.post('/api/tareas', requireAuth, async (req, res) => {
   try {
     const {
       titulo = '', descripcion = '', materia_id = 6,
       prioridad = 'Media', fecha_limite = '', general_categoria = '',
-      pomodoros_est = 1, min_anticipacion = 30, usuario_id = null,
+      pomodoros_est = 1, min_anticipacion = 30,
     } = req.body;
 
     if (!titulo.trim()) {
@@ -201,7 +228,7 @@ app.post('/api/tareas', async (req, res) => {
       min_anticipacion: Number(min_anticipacion),
       aviso_enviado: 0,
       nota: null,
-      usuario_id: usuario_id != null ? Number(usuario_id) : null,
+      usuario_id: Number(req.session.userId),
       fecha_creacion: new Date().toISOString(),
     };
 
@@ -212,7 +239,7 @@ app.post('/api/tareas', async (req, res) => {
   }
 });
 
-app.put('/api/tareas', async (req, res) => {
+app.put('/api/tareas', requireAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = Number(data.id || 0);
@@ -233,6 +260,9 @@ app.put('/api/tareas', async (req, res) => {
     if (!doc.exists) {
       return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
     }
+    if (doc.data().usuario_id !== Number(req.session.userId)) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para modificar esta tarea.' });
+    }
 
     await ref.update(updates);
     res.json({ success: true });
@@ -241,12 +271,18 @@ app.put('/api/tareas', async (req, res) => {
   }
 });
 
-app.delete('/api/tareas', async (req, res) => {
+app.delete('/api/tareas', requireAuth, async (req, res) => {
   try {
     const id = Number(req.body.id || 0);
     if (!id) return res.status(400).json({ success: false, error: 'ID requerido.' });
 
-    await db.collection('tareas').doc(String(id)).delete();
+    const tareaRef = db.collection('tareas').doc(String(id));
+    const tareaDoc = await tareaRef.get();
+    if (!tareaDoc.exists) return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
+    if (tareaDoc.data().usuario_id !== Number(req.session.userId)) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para eliminar esta tarea.' });
+    }
+    await tareaRef.delete();
 
     const alertasSnap = await db.collection('alertas').where('tarea_id', '==', id).get();
     if (!alertasSnap.empty) {
@@ -267,17 +303,18 @@ app.post('/api/auth', async (req, res) => {
   try {
     const action = req.query.action || req.body.action;
     const { nombre = '', email = '', password = '' } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (!['login', 'register', 'google'].includes(action)) {
       return res.status(405).json({ success: false, error: 'Acción no soportada.' });
     }
 
     if (action === 'register') {
-      if (!nombre.trim() || !email.trim() || !password) {
+      if (!nombre.trim() || !normalizedEmail || !password) {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const existing = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const existing = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (!existing.empty) {
         return res.status(409).json({ success: false, error: 'Este correo ya está registrado.' });
       }
@@ -287,51 +324,32 @@ app.post('/api/auth', async (req, res) => {
       const usuario = {
         id,
         nombre: nombre.trim(),
-        email: email.trim(),
+        email: normalizedEmail,
         password_hash: hash,
         fecha_creacion: new Date().toISOString(),
       };
       await db.collection('usuarios').doc(String(id)).set(usuario);
+      req.session.userId = id;
       return res.json({ success: true, user_id: id });
     }
 
     if (action === 'login') {
-      if (!email.trim() || !password) {
+      if (!normalizedEmail || !password) {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const snap = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (snap.empty) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
       const user = snap.docs[0].data();
       const match = await bcrypt.compare(password, user.password_hash);
       if (!match) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
+      req.session.userId = user.id;
       return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
     }
 
-    if (action === 'google') {
-      if (!email.trim()) {
-        return res.status(400).json({ success: false, error: 'Campos incompletos' });
-      }
-
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
-      if (!snap.empty) {
-        const user = snap.docs[0].data();
-        return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
-      }
-
-      const id = await nextId('usuarios');
-      const usuario = {
-        id,
-        nombre: nombre.trim() || email.trim().split('@')[0],
-        email: email.trim(),
-        password_hash: null,
-        fecha_creacion: new Date().toISOString(),
-      };
-      await db.collection('usuarios').doc(String(id)).set(usuario);
-      return res.json({ success: true, user: { id: usuario.id, nombre: usuario.nombre, email: usuario.email } });
-    }
+    if (action === 'google') return res.status(501).json({ success: false, error: 'Usa Cuenta → Integraciones para conectar Google de forma segura.' });
   } catch (error) {
     console.error('AUTH ERROR:', error.message, error.stack);
     res.status(500).json({
@@ -339,6 +357,22 @@ app.post('/api/auth', async (req, res) => {
       error: 'Error en auth: ' + error.message
     });
   }
+});
+
+app.get('/api/session', async (req, res) => {
+  if (!req.session?.userId) return res.status(401).json({ success: false });
+  const doc = await db.collection('usuarios').doc(String(req.session.userId)).get();
+  if (!doc.exists) return req.session.destroy(() => res.status(401).json({ success: false }));
+  const user = doc.data();
+  res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(error => {
+    if (error) return res.status(500).json({ success: false, error: 'No se pudo cerrar la sesión.' });
+    res.clearCookie('tm.sid');
+    res.json({ success: true });
+  });
 });
 
 // ── Notificaciones ───────────────────────────────────────────────────────

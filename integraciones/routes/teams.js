@@ -15,7 +15,7 @@ async function graphGet(path, accessToken) {
 
 router.get('/api/microsoft/teams/equipos', async (req, res) => {
   try {
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const data = await graphGet('/me/joinedTeams?$select=id,displayName', accessToken);
     res.json({ success: true, equipos: data.value || [] });
   } catch (error) {
@@ -27,7 +27,7 @@ router.get('/api/microsoft/teams/canales', async (req, res) => {
   try {
     const { equipo_id } = req.query;
     if (!equipo_id) return res.status(400).json({ success: false, error: 'equipo_id es obligatorio.' });
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const data = await graphGet(`/teams/${equipo_id}/channels?$select=id,displayName`, accessToken);
     res.json({ success: true, canales: data.value || [] });
   } catch (error) {
@@ -43,12 +43,12 @@ router.post('/api/microsoft/teams/mensaje', async (req, res) => {
     }
 
     const base = process.env.MAIN_API_URL || 'http://localhost:3000';
-    const r = await fetch(`${base}/api/tareas`);
+    const r = await fetch(`${base}/api/tareas`, { headers: { cookie: req.headers.cookie || '' } });
     const data = await r.json();
     const tarea = (data.tareas || []).find(t => Number(t.id) === Number(tarea_id));
     if (!tarea) return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
 
-    const accessToken = await obtenerAccessToken();
+    const accessToken = await obtenerAccessToken(req.user.id);
     const mres = await fetch(`https://graph.microsoft.com/v1.0/teams/${equipo_id}/channels/${canal_id}/messages`, {
       method: 'POST',
       headers: {
