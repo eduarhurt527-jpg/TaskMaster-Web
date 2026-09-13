@@ -33,10 +33,13 @@ class TaskModel {
 
     // ── GET: todas las tareas ─────────────────────────────────────────────────
     async getAll() {
+        const uid = this._userId();
+        if (!uid) {
+            this._tareas = this._lsGet();
+            return this._tareas;
+        }
         try {
-            const uid = this._userId();
-            const url = uid ? `${this.API_TAREAS}?usuario_id=${uid}` : this.API_TAREAS;
-            const res  = await fetch(url, { credentials: 'include' });
+            const res  = await fetch(this.API_TAREAS, { credentials: 'include' });
             const data = await res.json();
             if (res.ok && data.success) {
                 this._tareas = data.tareas;
@@ -61,12 +64,20 @@ class TaskModel {
         if (!tarea.fecha_limite) {
             return { success: false, error: 'La fecha límite es obligatoria.' };
         }
+        if (!this._userId()) {
+            const nueva = { ...tarea, usuario_id: null, id: this._lsNextId(), completada: 0, pomodoros_real: 0 };
+            const arr = this._lsGet();
+            arr.push(nueva);
+            this._lsSave(arr);
+            this._tareas = arr;
+            return { success: true, tarea: nueva };
+        }
         try {
             const res  = await fetch(this.API_TAREAS, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ ...tarea, usuario_id: this._userId() })
+                body: JSON.stringify(tarea)
             });
             const data = await res.json();
             if (res.ok && data.success) {
@@ -91,6 +102,12 @@ class TaskModel {
 
     // ── PUT: actualizar tarea ─────────────────────────────────────────────────
     async update(id, cambios) {
+        if (!this._userId()) {
+            const arr = this._lsGet().map(t => t.id === id ? { ...t, ...cambios } : t);
+            this._lsSave(arr);
+            this._tareas = arr;
+            return { success: true };
+        }
         try {
             const res  = await fetch(this.API_TAREAS, {
                 method: 'PUT',
@@ -121,6 +138,12 @@ class TaskModel {
 
     // ── DELETE: eliminar tarea ────────────────────────────────────────────────
     async delete(id) {
+        if (!this._userId()) {
+            const arr = this._lsGet().filter(t => t.id !== id);
+            this._lsSave(arr);
+            this._tareas = arr;
+            return { success: true };
+        }
         try {
             const res  = await fetch(this.API_TAREAS, {
                 method: 'DELETE',
