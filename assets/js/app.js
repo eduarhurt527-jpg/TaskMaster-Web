@@ -209,10 +209,6 @@ class App {
     if (publicLogin) publicLogin.addEventListener('click', () => this.authView.openMode('login'));
     const publicRegister = document.getElementById('btn-public-register');
     if (publicRegister) publicRegister.addEventListener('click', () => this.authView.openMode('register'));
-    const publicWorkspace = document.getElementById('btn-public-workspace');
-    if (publicWorkspace) publicWorkspace.addEventListener('click', () => this.enterWorkspace());
-    const publicLogout = document.getElementById('btn-public-logout');
-    if (publicLogout) publicLogout.addEventListener('click', () => this.authView.logout());
     const btnHeroReg = document.getElementById('btn-hero-registrarse');
     if (btnHeroReg) btnHeroReg.addEventListener('click', () => this.authView.openMode('register'));
     const btnGoogle = document.getElementById('btn-google-login');
@@ -365,16 +361,10 @@ class App {
     });
     const publicLogin = document.getElementById('btn-public-login');
     const publicRegister = document.getElementById('btn-public-register');
-    const publicWorkspace = document.getElementById('btn-public-workspace');
-    const publicLogout = document.getElementById('btn-public-logout');
-    // Evita cuatro acciones simultáneas: una cuenta activa muestra solo panel y salida.
-    if (publicLogin) publicLogin.hidden = this.accessMode === 'authenticated';
-    if (publicRegister) publicRegister.hidden = this.accessMode === 'authenticated';
-    if (publicWorkspace) {
-      publicWorkspace.hidden = this.accessMode === 'public';
-      publicWorkspace.textContent = this.accessMode === 'guest' ? 'Volver al panel' : 'Ir a mi panel';
-    }
-    if (publicLogout) publicLogout.hidden = this.accessMode !== 'authenticated';
+    // La portada nunca presenta accesos al espacio privado. Al volver desde el
+    // panel, la sesión se revoca antes de mostrar estas dos acciones públicas.
+    if (publicLogin) publicLogin.hidden = false;
+    if (publicRegister) publicRegister.hidden = false;
   }
 
   _updateCountdown() {
