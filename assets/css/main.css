@@ -1850,6 +1850,7 @@ section[id] { scroll-margin-top: 88px; }
 .public-brand { gap: 13px; }
 .public-header { min-height: 64px; }
 .public-actions { align-items: center; }
+.public-actions [hidden] { display: none !important; }
 .public-actions .btn { white-space: nowrap; }
 .hero { margin-top: 28px; padding-block: clamp(42px,5vw,66px); }
 .hero__content { gap: clamp(34px,4vw,58px); }
