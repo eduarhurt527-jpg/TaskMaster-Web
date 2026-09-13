@@ -77,35 +77,7 @@ class AuthView {
   }
 
   async _submitGoogle() {
-    const email = this.$email.value.trim();
-    if (!email) {
-      this.app.showToast('Introduce tu correo', 'error');
-      return;
-    }
-    const nombre = email.split('@')[0];
-    try {
-      const res = await fetch('api/auth?action=google', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, nombre })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const user = { id: data.user.id, nombre: data.user.nombre, email };
-        localStorage.setItem('tm_user', JSON.stringify(user));
-        this.app.setUser(user);
-        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
-        if (this.app && this.app.homeView) this.app.homeView.render();
-        this.app.showToast('Conectado con Google', 'success');
-        this.close();
-        return;
-      }
-      this.app.showToast(data.error || 'Error Google', 'error');
-    } catch (e) {
-      console.error(e);
-      this.app.showToast('Error de red Google', 'error');
-    }
+    this.app.showToast('Google estará disponible cuando se configure OAuth real', 'info');
   }
 
   close() {
@@ -155,14 +127,34 @@ class AuthView {
     }
   }
 
-  _restoreUser() {
-    const u = localStorage.getItem('tm_user');
-    if (u) {
-      try { const user = JSON.parse(u); this.app.setUser(user); } catch(e){}
+  async _restoreUser() {
+    try {
+      const res = await fetch('api/auth?action=session', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        localStorage.setItem('tm_user', JSON.stringify(data.user));
+        this.app.setUser(data.user);
+        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
+        return;
+      }
+    } catch (e) {
+      console.warn('No se pudo restaurar la sesión', e);
     }
+    localStorage.removeItem('tm_user');
+    this.app.setUser(null);
   }
 
   async logout() {
+    try {
+      await fetch('api/auth?action=logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+    } catch (e) {
+      console.warn('No se pudo cerrar la sesión en el servidor', e);
+    }
     localStorage.removeItem('tm_user');
     this.app.setUser(null);
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada
