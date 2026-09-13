@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { createHash, randomBytes } from 'crypto';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { google } from 'googleapis';
 
 dotenv.config();
 
@@ -105,6 +106,8 @@ const db = getFirestore(firebaseApp);
 
 const SESSION_COOKIE = 'tm_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const GOOGLE_STATE_COOKIE = 'tm_google_state';
+const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
 
 function parseCookies(req) {
   const result = {};
@@ -127,7 +130,22 @@ function sessionCookie(token, maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000))
   return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
 }
 
-async function createSession(res, user) {
+function shortLivedCookie(name, value, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${name}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function googleOAuthClient() {
+  const clientId = process.env.GOOGLE_LOGIN_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_LOGIN_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_LOGIN_REDIRECT_URI;
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Google Login no está configurado.');
+  }
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+async function createSession(res, user, additionalCookies = []) {
   const token = randomBytes(32).toString('base64url');
   const tokenHash = hashSessionToken(token);
   await db.collection('_sessions').doc(tokenHash).set({
@@ -135,7 +153,7 @@ async function createSession(res, user) {
     created_at: new Date().toISOString(),
     expires_at: Date.now() + SESSION_TTL_MS,
   });
-  res.setHeader('Set-Cookie', sessionCookie(token));
+  res.setHeader('Set-Cookie', [...additionalCookies, sessionCookie(token)]);
 }
 
 async function revokeSession(req) {
@@ -193,6 +211,107 @@ const sessionCleanupTimer = setInterval(
   60 * 60 * 1000
 );
 sessionCleanupTimer.unref();
+
+// ── Google Login OAuth 2.0 / OpenID Connect ────────────────────────────────
+
+app.get('/api/auth/google/start', authLimiter, async (req, res) => {
+  try {
+    const state = randomBytes(32).toString('base64url');
+    const stateHash = hashSessionToken(state);
+    await db.collection('_google_login_states').doc(stateHash).set({
+      expires_at: Date.now() + GOOGLE_STATE_TTL_MS,
+      created_at: new Date().toISOString(),
+    });
+    res.setHeader('Set-Cookie', shortLivedCookie(
+      GOOGLE_STATE_COOKIE,
+      state,
+      Math.floor(GOOGLE_STATE_TTL_MS / 1000)
+    ));
+    const url = googleOAuthClient().generateAuthUrl({
+      access_type: 'online',
+      prompt: 'select_account',
+      scope: ['openid', 'email', 'profile'],
+      state,
+    });
+    res.redirect(url);
+  } catch (error) {
+    console.error('GOOGLE LOGIN START ERROR:', error.message);
+    res.redirect('/?auth_error=google_config');
+  }
+});
+
+app.get('/api/auth/google/callback', authLimiter, async (req, res) => {
+  const clearStateCookie = shortLivedCookie(GOOGLE_STATE_COOKIE, '', 0);
+  try {
+    if (req.query.error || !req.query.code || !req.query.state) {
+      throw new Error('Autorización cancelada o incompleta.');
+    }
+
+    const cookieState = parseCookies(req)[GOOGLE_STATE_COOKIE];
+    if (!cookieState || cookieState !== req.query.state) {
+      throw new Error('Estado OAuth inválido.');
+    }
+
+    const stateRef = db.collection('_google_login_states').doc(hashSessionToken(req.query.state));
+    const stateDoc = await stateRef.get();
+    if (!stateDoc.exists) throw new Error('Estado OAuth inexistente.');
+    await stateRef.delete();
+    if (stateDoc.data().expires_at <= Date.now()) throw new Error('Estado OAuth expirado.');
+
+    const client = googleOAuthClient();
+    const { tokens } = await client.getToken(req.query.code);
+    if (!tokens.id_token) throw new Error('Google no devolvió un ID token.');
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_LOGIN_CLIENT_ID,
+    });
+    const profile = ticket.getPayload();
+    if (!profile?.sub || !profile.email || !profile.email_verified) {
+      throw new Error('La cuenta de Google no tiene un correo verificado.');
+    }
+
+    const normalizedEmail = profile.email.trim().toLowerCase();
+    const existing = await db.collection('usuarios')
+      .where('email', '==', normalizedEmail)
+      .limit(1)
+      .get();
+
+    let user;
+    if (existing.empty) {
+      const id = await nextId('usuarios');
+      user = {
+        id,
+        nombre: String(profile.name || normalizedEmail.split('@')[0]).slice(0, 100),
+        email: normalizedEmail,
+        password_hash: null,
+        auth_provider: 'google',
+        google_sub: profile.sub,
+        fecha_creacion: new Date().toISOString(),
+      };
+      await db.collection('usuarios').doc(String(id)).set(user);
+    } else {
+      const ref = existing.docs[0].ref;
+      const current = existing.docs[0].data();
+      if (current.google_sub && current.google_sub !== profile.sub) {
+        throw new Error('La cuenta Google no coincide con la cuenta vinculada.');
+      }
+      await ref.set({
+        google_sub: profile.sub,
+        auth_provider: current.password_hash ? 'local+google' : 'google',
+      }, { merge: true });
+      user = { ...current, google_sub: profile.sub };
+    }
+
+    const publicUser = { id: user.id, nombre: user.nombre, email: user.email };
+    await createSession(res, publicUser, [clearStateCookie]);
+    res.redirect('/?login=google');
+  } catch (error) {
+    console.error('GOOGLE LOGIN CALLBACK ERROR:', error.message);
+    res.setHeader('Set-Cookie', clearStateCookie);
+    res.redirect('/?auth_error=google');
+  }
+});
 
 // Verificar conexión a Firebase al arrancar
 db.collection('_healthcheck').limit(1).get()

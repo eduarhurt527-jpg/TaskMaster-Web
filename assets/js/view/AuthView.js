@@ -53,7 +53,7 @@ class AuthView {
     this.open();
   }
 
-  /** Simula login con proveedor (Google). En producción usar OAuth real. */
+  /** Inicia el flujo OAuth real de Google en el backend. */
   openGoogleMode() {
     this.mode = 'google';
     this.$modeLabel.textContent = 'Google';
@@ -70,14 +70,14 @@ class AuthView {
 
   async loginWithProvider(provider) {
     if (provider === 'google') {
-      this.openGoogleMode();
+      window.location.assign('/api/auth/google/start');
     } else {
       this.openMode('login');
     }
   }
 
   async _submitGoogle() {
-    this.app.showToast('Google estará disponible cuando se configure OAuth real', 'info');
+    window.location.assign('/api/auth/google/start');
   }
 
   close() {
@@ -140,6 +140,7 @@ class AuthView {
         localStorage.setItem('tm_user', JSON.stringify(data.user));
         this.app.setUser(data.user);
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
+        this._handleOAuthResult();
         return;
       }
     } catch (e) {
@@ -147,6 +148,24 @@ class AuthView {
     }
     localStorage.removeItem('tm_user');
     this.app.setUser(null);
+    this._handleOAuthResult();
+  }
+
+  _handleOAuthResult() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('login') === 'google') {
+      this.app.showToast('Sesión iniciada con Google', 'success');
+    } else if (params.get('auth_error') === 'google_config') {
+      this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
+    } else if (params.get('auth_error') === 'google') {
+      this.app.showToast('Google no pudo verificar el inicio de sesión', 'error');
+    } else {
+      return;
+    }
+    params.delete('login');
+    params.delete('auth_error');
+    const query = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
   }
 
   async logout() {

@@ -56,8 +56,9 @@ integraciones/           → microservicio de integraciones externas
   acepta `usuario_id` como prueba de identidad.
 - Las tareas de un invitado permanecen exclusivamente en el `localStorage` de su navegador
   y no se mezclan con las cuentas registradas.
-- El acceso simulado con Google está deshabilitado hasta configurar una verificación OAuth
-  real; las autorizaciones Google/Microsoft de `integraciones/` son independientes.
+- El acceso con Google usa OAuth 2.0/OpenID Connect. El backend intercambia el código,
+  verifica el ID token firmado, exige un correo verificado y crea la misma sesión segura.
+  Las autorizaciones Google/Microsoft de `integraciones/` son independientes.
 - Las sesiones duran siete días. Cerrar sesión elimina el registro en Firestore y vence la cookie.
 - Los datos locales se separan entre `tm_tareas_guest` y `tm_tareas_user_<id>` para que
   cerrar sesión no muestre las tareas almacenadas en caché de otra cuenta.
@@ -70,6 +71,24 @@ integraciones/           → microservicio de integraciones externas
 
 Para producción, configura `NODE_ENV=production`, utiliza HTTPS y define `CORS_ORIGIN`
 con el dominio exacto de la aplicación.
+
+### Configurar el inicio de sesión real con Google
+
+1. En Google Cloud Console configura la pantalla de consentimiento OAuth.
+2. Crea credenciales de tipo **ID de cliente OAuth 2.0 → Aplicación web**.
+3. Agrega `http://localhost:3000` como origen JavaScript autorizado.
+4. Agrega `http://localhost:3000/api/auth/google/callback` como URI de redirección.
+5. Copia el ID y el secreto en el archivo `.env` principal:
+
+```dotenv
+GOOGLE_LOGIN_CLIENT_ID=tu-client-id.apps.googleusercontent.com
+GOOGLE_LOGIN_CLIENT_SECRET=tu-client-secret
+GOOGLE_LOGIN_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+```
+
+El flujo solicita únicamente `openid`, `email` y `profile`. TaskMaster nunca recibe la
+contraseña de Google ni guarda los tokens OAuth usados para iniciar sesión. Si el proyecto
+OAuth está en modo de prueba, agrega cada correo permitido en **Usuarios de prueba**.
 
 ## Seguridad de integraciones OAuth
 
