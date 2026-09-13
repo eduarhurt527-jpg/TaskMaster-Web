@@ -357,9 +357,9 @@ class App {
     const publicRegister = document.getElementById('btn-public-register');
     const publicWorkspace = document.getElementById('btn-public-workspace');
     const publicLogout = document.getElementById('btn-public-logout');
-    // La portada siempre permite que una persona distinta inicie o cree su cuenta.
-    if (publicLogin) publicLogin.hidden = false;
-    if (publicRegister) publicRegister.hidden = false;
+    // Evita cuatro acciones simultáneas: una cuenta activa muestra solo panel y salida.
+    if (publicLogin) publicLogin.hidden = this.accessMode === 'authenticated';
+    if (publicRegister) publicRegister.hidden = this.accessMode === 'authenticated';
     if (publicWorkspace) {
       publicWorkspace.hidden = this.accessMode === 'public';
       publicWorkspace.textContent = this.accessMode === 'guest' ? 'Volver al panel' : 'Ir a mi panel';

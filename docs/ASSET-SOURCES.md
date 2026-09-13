@@ -1,5 +1,15 @@
 # Fuentes de recursos visuales
 
+## Video de planificación
+
+- Archivo local: `assets/video/taskmaster-planning.mp4`
+- Portada local: `assets/img/illustrations/taskmaster-planning-poster.webp`
+- Título: “Person Writing a To Do List”
+- Autora: Miriam Alonso
+- Fuente: https://www.pexels.com/video/person-writing-a-to-do-list-7597168/
+- Licencia: Pexels License — https://www.pexels.com/license/
+- Adaptación: resolución reducida a 720 × 1280, sin audio y optimizada para carga web.
+
 TaskMaster evita imágenes genéricas y hotlinks externos. La interfaz principal utiliza
 SVG locales, composiciones CSS y símbolos de texto accesibles.
 
