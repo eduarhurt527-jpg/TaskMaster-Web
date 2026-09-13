@@ -21,6 +21,7 @@ class App {
     this.authView      = new AuthView(this);
     this.recordingView = new RecordingView(this);
     this.fileWorkspaceView = new FileWorkspaceView(this);
+    this.integrationView = new IntegrationView(this);
 
     this._vistaActual  = 'home';
 
@@ -265,6 +266,7 @@ class App {
 
     if (vista === 'overview') this.dashboardView.render();
     if (vista === 'home')      this.homeView.render();
+    if (vista === 'integrations') this.integrationView?.refresh();
   }
 
 

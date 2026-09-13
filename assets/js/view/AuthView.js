@@ -117,6 +117,7 @@ class AuthView {
         this.app.enterWorkspace();
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (this.app && this.app.homeView) this.app.homeView.render();
+        this.app.integrationView?.refresh();
         this.app.showToast(this.mode === 'login' ? 'Bienvenido' : 'Cuenta creada', 'success');
         this.$form.reset();
         this.close();

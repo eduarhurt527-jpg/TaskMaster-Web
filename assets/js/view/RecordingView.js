@@ -12,10 +12,12 @@ class RecordingView {
     this.discardButton = document.getElementById('record-discard');
     this.download = document.getElementById('record-download');
     this.youtube = document.getElementById('record-youtube');
+    this.youtubeApi = document.getElementById('record-youtube-api');
     this.stream = null;
     this.recorder = null;
     this.parts = [];
     this.objectUrl = null;
+    this.outputBlob = null;
     this.seconds = 0;
     this.clock = null;
     this.discarding = false;
@@ -31,6 +33,7 @@ class RecordingView {
     this.pauseButton?.addEventListener('click', () => this.togglePause());
     this.stopButton?.addEventListener('click', () => this.stop());
     this.discardButton?.addEventListener('click', () => this.discard());
+    this.youtubeApi?.addEventListener('click', () => this.uploadYouTube());
   }
 
   _setSupported() {
@@ -125,6 +128,7 @@ class RecordingView {
       return;
     }
     if (blob.size) {
+      this.outputBlob = blob;
       this.objectUrl = URL.createObjectURL(blob);
       this.video.srcObject = null;
       this.video.src = this.objectUrl;
@@ -133,6 +137,7 @@ class RecordingView {
       this.download.download = `taskmaster-grabacion-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
       this.download.hidden = false;
       this.youtube.hidden = false;
+      this.youtubeApi.hidden = false;
       this.status.textContent = 'Grabación lista. Puedes revisarla o descargarla; no se ha subido al servidor.';
     }
   }
@@ -164,12 +169,29 @@ class RecordingView {
     if (this.video?.srcObject) this.video.srcObject = null;
   }
 
+  async uploadYouTube() {
+    if (!this.outputBlob) return;
+    if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
+    this.youtubeApi.disabled = true;
+    this.status.textContent = 'Subiendo el video privado a YouTube…';
+    try {
+      const response = await fetch('/api/integrations/google/youtube/upload', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'video/webm', 'X-Video-Title': `Grabación TaskMaster ${new Date().toLocaleString()}` }, body: this.outputBlob });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo subir.');
+      this.status.textContent = `Video privado publicado: ${data.url}`;
+      this.app.showToast('Video privado subido a YouTube', 'success');
+    } catch (error) { this.status.textContent = error.message; this.app.showToast(error.message, 'error'); }
+    finally { this.youtubeApi.disabled = false; }
+  }
+
   _clearDownload() {
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.objectUrl = null;
+    this.outputBlob = null;
     this.download?.removeAttribute('href');
     if (this.download) this.download.hidden = true;
     if (this.youtube) this.youtube.hidden = true;
+    if (this.youtubeApi) this.youtubeApi.hidden = true;
   }
 
   _renderTime() {
