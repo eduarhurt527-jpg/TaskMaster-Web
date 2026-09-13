@@ -69,6 +69,18 @@ integraciones/           → microservicio de integraciones externas
 - Los endpoints de autenticación tienen límite de intentos, validación de email y una
   contraseña de al menos 8 caracteres (máximo 72 bytes, límite seguro de bcrypt).
 
+### Estados de la interfaz
+
+La interfaz usa un control central con tres estados:
+
+- `PUBLIC`: muestra únicamente la landing, información, integraciones, nosotros y contacto.
+- `GUEST`: habilita el espacio de tareas local con `tm_tareas_guest`; bloquea integraciones.
+- `AUTHENTICATED`: habilita tareas persistentes e integraciones protegidas por sesión.
+
+La gestión no aparece hasta que la persona inicia sesión, se registra, usa Google real o
+elige explícitamente **Continuar como invitado**. El rediseño y sus fuentes están documentados
+en `docs/UX-RESEARCH.md` y `docs/ASSET-SOURCES.md`.
+
 Para producción, configura `NODE_ENV=production`, utiliza HTTPS y define `CORS_ORIGIN`
 con el dominio exacto de la aplicación.
 

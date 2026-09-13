@@ -7,14 +7,14 @@
 class App {
 
   constructor() {
+    this.user = null;
+    this.accessMode = localStorage.getItem('tm_access_mode') === 'guest' ? 'guest' : 'public';
     // Instanciar Views
     this.homeView      = new HomeView(taskViewModel);
     this.dashboardView = new DashboardView(taskViewModel);
     this.modalView     = new ModalView(taskViewModel);
     this.pomodoroView  = new PomodoroView(taskViewModel);
     this.authView      = new AuthView(this);
-
-    this.user = null;
 
     this._vistaActual  = 'home';
 
@@ -169,10 +169,12 @@ class App {
     // FAB: abrir modal nueva tarea
     const btnNew = document.getElementById('btn-nueva-tarea');
     if (btnNew) btnNew.addEventListener('click', () => {
+      if (!this._canUseWorkspace()) return this._requestAccess();
       this.modalView.abrirNueva();
     });
     const btnFab = document.getElementById('btn-fab-nueva-tarea');
     if (btnFab) btnFab.addEventListener('click', () => {
+      if (!this._canUseWorkspace()) return this._requestAccess();
       this.modalView.abrirNueva();
     });
 
@@ -181,18 +183,42 @@ class App {
     if (btnLogin) btnLogin.addEventListener('click', () => this.authView.openMode('login'));
     const btnReg = document.getElementById('btn-registrarse');
     if (btnReg) btnReg.addEventListener('click', () => this.authView.openMode('register'));
+    const publicLogin = document.getElementById('btn-public-login');
+    if (publicLogin) publicLogin.addEventListener('click', () => this.authView.openMode('login'));
+    const publicRegister = document.getElementById('btn-public-register');
+    if (publicRegister) publicRegister.addEventListener('click', () => this.authView.openMode('register'));
     const btnHeroReg = document.getElementById('btn-hero-registrarse');
     if (btnHeroReg) btnHeroReg.addEventListener('click', () => this.authView.openMode('register'));
     const btnGoogle = document.getElementById('btn-google-login');
     if (btnGoogle) btnGoogle.addEventListener('click', () => this.authView.loginWithProvider('google'));
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) btnLogout.addEventListener('click', () => this.authView.logout());
+    document.querySelectorAll('[data-action="guest"]').forEach(btn => {
+      btn.addEventListener('click', () => this.enterGuest());
+    });
+    document.querySelectorAll('[data-action="public"]').forEach(btn => {
+      btn.addEventListener('click', () => this.showPublic());
+    });
+    document.querySelectorAll('[data-requires-account]').forEach(el => {
+      el.addEventListener('click', event => {
+        if (this.accessMode === 'authenticated') return;
+        event.preventDefault();
+        this.showToast('Esta función necesita una cuenta para mantener tus datos e integraciones protegidos.', 'warning');
+      });
+    });
     const btnCarga = document.getElementById('btn-carga-semanal');
     if (btnCarga) btnCarga.addEventListener('click', () => {
       this._cambiarVista('overview');
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const nav = document.querySelector('.nav-btn[data-view="overview"]'); if (nav) nav.classList.add('active');
     });
+    const contactForm = document.getElementById('contact-form');
+    if (contactForm) contactForm.addEventListener('submit', event => {
+      event.preventDefault();
+      this.showToast('Formulario listo para conectar con el canal de contacto.', 'info');
+    });
+    const year = document.getElementById('current-year');
+    if (year) year.textContent = String(new Date().getFullYear());
 
     // Teclado: ESC cierra modales
     document.addEventListener('keydown', e => {
@@ -219,6 +245,16 @@ class App {
 
   setUser(user) {
     this.user = user;
+    if (user) {
+      this.accessMode = 'authenticated';
+      localStorage.setItem('tm_access_mode', 'authenticated');
+    } else if (localStorage.getItem('tm_access_mode') === 'guest') {
+      this.accessMode = 'guest';
+    } else {
+      this.accessMode = 'public';
+      localStorage.removeItem('tm_access_mode');
+    }
+    this._applyAccessState();
     const el = document.getElementById('header-welcome');
     if (el) el.textContent = user && user.nombre ? `Hola, ${user.nombre}` : 'Bienvenido';
 
@@ -232,6 +268,47 @@ class App {
 
     const hero = document.getElementById('hero-landing');
     if (hero) hero.style.display = user ? 'none' : '';
+  }
+
+  _canUseWorkspace() {
+    return this.accessMode === 'guest' || this.accessMode === 'authenticated';
+  }
+
+  _requestAccess() {
+    this.showToast('Inicia sesión, regístrate o continúa como invitado.', 'info');
+    this.authView.openMode('login');
+  }
+
+  async enterGuest() {
+    this.user = null;
+    this.accessMode = 'guest';
+    localStorage.setItem('tm_access_mode', 'guest');
+    this._applyAccessState();
+    await taskViewModel.cargarTareas();
+    this.homeView.render();
+    this.showToast('Estás usando TaskMaster como invitado', 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  showPublic() {
+    this.user = null;
+    this.accessMode = 'public';
+    localStorage.removeItem('tm_access_mode');
+    this._applyAccessState();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  _applyAccessState() {
+    document.body.dataset.access = this.accessMode;
+    const badge = document.getElementById('access-badge');
+    if (badge) {
+      badge.textContent = this.accessMode === 'guest' ? 'Modo invitado' : 'Cuenta sincronizada';
+      badge.className = `access-badge access-badge--${this.accessMode}`;
+    }
+    document.querySelectorAll('[data-auth-only]').forEach(el => {
+      el.classList.toggle('is-locked', this.accessMode !== 'authenticated');
+      el.setAttribute('aria-disabled', String(this.accessMode !== 'authenticated'));
+    });
   }
 
   _updateCountdown() {
@@ -264,6 +341,7 @@ class App {
   // ── Inicialización ────────────────────────────────────────────────────────
 
   async _iniciar() {
+    this._applyAccessState();
     await taskViewModel.cargarTareas();
     this.homeView.render();
   }

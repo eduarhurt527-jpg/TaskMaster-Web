@@ -7,9 +7,27 @@
   <link rel="stylesheet" href="assets/css/main.css" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 </head>
-<body>
+<body data-access="public">
 
-  <header class="app-header">
+  <header class="public-header" data-public-only>
+    <a class="public-brand" href="#inicio" aria-label="TaskMaster, volver al inicio">
+      <img src="assets/img/logo.svg" alt="" />
+      <span>TaskMaster</span>
+    </a>
+    <nav class="public-nav" aria-label="Navegación principal">
+      <a href="#caracteristicas">Características</a>
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#integraciones">Integraciones</a>
+      <a href="#nosotros">Nosotros</a>
+      <a href="#contacto">Contacto</a>
+    </nav>
+    <div class="public-actions">
+      <button class="btn btn--ghost" id="btn-public-login">Iniciar sesión</button>
+      <button class="btn btn--primary" id="btn-public-register">Crear cuenta</button>
+    </div>
+  </header>
+
+  <header class="app-header" data-workspace-only>
     <div class="header-inner">
       <div class="brand">
         <img src="assets/img/logo.svg" alt="TaskMaster" class="brand-logo" />
@@ -19,6 +37,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <span class="access-badge" id="access-badge">Modo invitado</span>
         <div>
           <div class="welcome" id="header-welcome">Bienvenido</div>
           <div class="header-countdown" id="header-countdown"></div>
@@ -65,14 +84,18 @@
     <!-- Vista Inicio -->
     <section id="view-home" class="view active">
 
-      <section class="hero" id="hero-landing">
+      <section class="hero" id="inicio" data-public-only>
         <div class="hero__dots"></div>
         <div class="hero__content">
           <div class="hero__copy">
             <p class="hero__eyebrow">Gestión de tareas simple</p>
             <h1 class="hero__title">Organiza tu día con enfoque</h1>
             <p class="hero__subtitle">Prioriza lo urgente, recibe recordatorios a tiempo y sigue tu avance sin perder el ritmo.</p>
-            <button class="btn btn--primary hero__cta" id="btn-hero-registrarse">Empieza gratis</button>
+            <div class="hero__actions">
+              <button class="btn btn--primary hero__cta" id="btn-hero-registrarse">Crear cuenta gratis</button>
+              <button class="btn btn--secondary hero__cta" data-action="guest">Continuar como invitado</button>
+            </div>
+            <p class="hero__trust">Sin tarjeta · Tus tareas de invitado permanecen en este navegador</p>
             <div class="hero__features">
               <div class="hero__feature">
                 <img src="assets/img/feature-notify.svg" alt="" />
@@ -154,7 +177,7 @@
         </div>
       </section>
 
-      <div class="home-panel">
+      <div class="home-panel" data-workspace-only>
         <div class="section-header">
           <div>
             <p class="section-label">CATEGORÍAS</p>
@@ -173,7 +196,7 @@
         <div class="filter-row" id="filter-row"></div>
       </div>
 
-      <section class="how-to">
+      <section class="how-to" id="como-funciona" data-public-only>
         <div class="section-header">
           <div>
             <p class="section-label">PASO A PASO</p>
@@ -199,7 +222,34 @@
         </div>
       </section>
 
-      <div class="home-summary">
+      <section class="public-integrations" id="integraciones" data-public-only>
+        <div class="section-header">
+          <div><p class="section-label">TODO CONECTADO</p><h2>Tus herramientas, en un solo flujo</h2></div>
+          <p>Conecta tu calendario, clases, archivos y equipo cuando tengas una cuenta.</p>
+        </div>
+        <div class="integration-showcase">
+          <article><span class="app-mark app-mark--google">G</span><h3>Google Calendar</h3><p>Convierte fechas límite en eventos.</p></article>
+          <article><span class="app-mark app-mark--drive">△</span><h3>Google Drive</h3><p>Vincula archivos a cada tarea.</p></article>
+          <article><span class="app-mark app-mark--classroom">C</span><h3>Classroom</h3><p>Importa trabajos y entregas.</p></article>
+          <article><span class="app-mark app-mark--teams">T</span><h3>Microsoft Teams</h3><p>Comparte tareas con tu equipo.</p></article>
+          <article><span class="app-mark app-mark--onedrive">☁</span><h3>OneDrive</h3><p>Mantén documentos a mano.</p></article>
+          <article><span class="app-mark app-mark--mail">@</span><h3>Recordatorios</h3><p>Envía avisos importantes.</p></article>
+        </div>
+      </section>
+
+      <section class="workspace-integrations" data-workspace-only>
+        <div class="section-header">
+          <div><p class="section-label">INTEGRACIONES</p><h2>Amplía tu espacio de trabajo</h2></div>
+          <a class="btn btn--secondary" href="http://localhost:3002" data-requires-account>Administrar conexiones</a>
+        </div>
+        <div class="workspace-apps">
+          <div><span class="app-mark app-mark--google">G</span><strong>Google</strong><small>Calendar · Drive · Classroom</small></div>
+          <div><span class="app-mark app-mark--teams">M</span><strong>Microsoft</strong><small>OneDrive · Teams</small></div>
+          <p class="guest-lock-message">Inicia sesión para conectar aplicaciones de manera segura.</p>
+        </div>
+      </section>
+
+      <div class="home-summary" data-workspace-only>
         <div class="home-summary__top">
           <div class="summary-card">
             <span class="summary-card__label">Carga semanal</span>
@@ -211,11 +261,11 @@
         </div>
         <div class="bar-chart" id="weekly-chart"></div>
       </div>
-      <div class="task-section">
+      <div class="task-section" data-workspace-only>
         <div class="task-list" id="task-list"></div>
       </div>
 
-      <section class="about-section">
+      <section class="about-section" id="nosotros" data-public-only>
         <div class="section-header">
           <div>
             <p class="section-label">ACERCA DE</p>
@@ -246,6 +296,11 @@
             <p>Ser el punto central donde tareas, recordatorios y herramientas como Google Calendar y Classroom se conectan, para que nada se pierda entre pestañas y aplicaciones.</p>
           </article>
           <article class="about-card">
+            <span class="about-card__icon">◎</span>
+            <h3>Visión</h3>
+            <p>Convertir la organización diaria en una experiencia sencilla, conectada y accesible para estudiantes y profesionales.</p>
+          </article>
+          <article class="about-card">
             <span class="about-card__icon">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="8.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.6"/>
@@ -258,6 +313,21 @@
             <p>TaskMaster es un proyecto académico creado por estudiantes enfocados en resolver un problema real: la gestión del tiempo y la productividad personal.</p>
           </article>
         </div>
+      </section>
+
+      <section class="contact-section" id="contacto" data-public-only>
+        <div>
+          <p class="section-label">CONTACTO</p>
+          <h2>¿Tienes una pregunta sobre TaskMaster?</h2>
+          <p>Cuéntanos cómo podemos ayudarte. La información de contacto puede configurarse antes de publicar el proyecto.</p>
+        </div>
+        <form class="contact-card" id="contact-form">
+          <label>Nombre<input type="text" required maxlength="100" placeholder="Tu nombre" /></label>
+          <label>Correo<input type="email" required maxlength="254" placeholder="correo@ejemplo.com" /></label>
+          <label>Mensaje<textarea required rows="4" maxlength="1000" placeholder="Escribe tu consulta"></textarea></label>
+          <button class="btn btn--primary" type="submit">Preparar mensaje</button>
+          <small>No almacenamos este mensaje hasta configurar un servicio de contacto.</small>
+        </form>
       </section>
     </section>
 
@@ -286,6 +356,12 @@
     </section>
 
   </main>
+
+  <footer class="public-footer" data-public-only>
+    <div><strong>TaskMaster</strong><p>Organización clara para avanzar con enfoque.</p></div>
+    <div><a href="#inicio">Inicio</a><a href="#integraciones">Integraciones</a><a href="#contacto">Contacto</a></div>
+    <p>© <span id="current-year"></span> TaskMaster · Proyecto académico</p>
+  </footer>
 
   <!-- Modal Nueva/Editar Tarea -->
   <div class="modal-overlay" id="modal-overlay">
@@ -427,7 +503,9 @@
   <!-- Modal Auth (login/register) -->
   <div class="modal-overlay" id="modal-auth-overlay">
     <div class="modal modal--form" id="modal-auth">
-      <img src="assets/img/auth-hero.jpg" alt="Organiza tu día" class="modal__hero" />
+      <div class="auth-visual" aria-hidden="true">
+        <span>✓</span><span>Hoy</span><span>3 tareas</span>
+      </div>
       <div class="modal__header">
         <div>
           <p class="modal-label" id="auth-mode-label">Cuenta</p>
