@@ -14,8 +14,18 @@ class TaskModel {
     }
 
     // ── Fallback localStorage ─────────────────────────────────────────────────
-    _lsGet()        { return JSON.parse(localStorage.getItem('tm_tareas') || '[]'); }
-    _lsSave(tareas) { localStorage.setItem('tm_tareas', JSON.stringify(tareas)); }
+    _storageKey() {
+        const uid = this._userId();
+        return uid ? `tm_tareas_user_${uid}` : 'tm_tareas_guest';
+    }
+    _lsGet() {
+        try {
+            return JSON.parse(localStorage.getItem(this._storageKey()) || '[]');
+        } catch (e) {
+            return [];
+        }
+    }
+    _lsSave(tareas) { localStorage.setItem(this._storageKey(), JSON.stringify(tareas)); }
     _lsNextId() {
         const t = this._lsGet();
         return t.length ? Math.max(...t.map(x => x.id)) + 1 : 1;
@@ -29,6 +39,11 @@ class TaskModel {
         } catch (e) {
             return null;
         }
+    }
+
+    _expireSession() {
+        localStorage.removeItem('tm_user');
+        if (window.app) window.app.setUser(null);
     }
 
     // ── GET: todas las tareas ─────────────────────────────────────────────────
@@ -47,7 +62,9 @@ class TaskModel {
                 return this._tareas;
             }
             if (res.status === 401) {
-                console.warn('No autorizado al obtener tareas. Usando localStorage.');
+                this._expireSession();
+                this._tareas = [];
+                return this._tareas;
             }
         } catch (e) {
             console.warn('API no disponible — usando localStorage', e);
@@ -85,18 +102,11 @@ class TaskModel {
                 this._lsSave(this._tareas);
                 return { success: true, tarea: data.tarea };
             }
-            if (res.status === 401) {
-                console.warn('No autorizado al crear tarea. Usando localStorage.');
-            }
-            return data;
+            if (res.status === 401) this._expireSession();
+            return { success: false, error: data.error || 'No se pudo crear la tarea.' };
         } catch (e) {
-            // Fallback offline
-            const nueva = { ...tarea, usuario_id: this._userId(), id: this._lsNextId(), completada: 0, pomodoros_real: 0 };
-            const arr = this._lsGet();
-            arr.push(nueva);
-            this._lsSave(arr);
-            this._tareas = arr;
-            return { success: true, tarea: nueva };
+            console.warn('API no disponible al crear tarea.', e);
+            return { success: false, error: 'Sin conexión: la tarea no se guardó en el servidor.' };
         }
     }
 
@@ -121,19 +131,12 @@ class TaskModel {
                 this._lsSave(this._tareas);
                 return { success: true };
             }
-            if (res.status === 401) {
-                console.warn('No autorizado al actualizar tarea. Usando localStorage.');
-            } else {
-                console.warn('API no disponible al actualizar tarea. Usando localStorage.');
-            }
+            if (res.status === 401) this._expireSession();
+            return { success: false, error: data.error || 'No se pudo actualizar la tarea.' };
         } catch (e) {
-            console.warn('API no disponible al actualizar tarea. Usando localStorage.', e);
+            console.warn('API no disponible al actualizar tarea.', e);
+            return { success: false, error: 'Sin conexión: el cambio no se guardó en el servidor.' };
         }
-        // Si el servidor no confirmó el cambio (error HTTP o excepción de red), aplicarlo localmente
-        const arr = this._lsGet().map(t => t.id === id ? { ...t, ...cambios } : t);
-        this._lsSave(arr);
-        this._tareas = arr;
-        return { success: true };
     }
 
     // ── DELETE: eliminar tarea ────────────────────────────────────────────────
@@ -157,19 +160,12 @@ class TaskModel {
                 this._lsSave(this._tareas);
                 return { success: true };
             }
-            if (res.status === 401) {
-                console.warn('No autorizado al eliminar tarea. Usando localStorage.');
-            } else {
-                console.warn('API no disponible al eliminar tarea. Usando localStorage.');
-            }
+            if (res.status === 401) this._expireSession();
+            return { success: false, error: data.error || 'No se pudo eliminar la tarea.' };
         } catch (e) {
-            console.warn('API no disponible al eliminar tarea. Usando localStorage.', e);
+            console.warn('API no disponible al eliminar tarea.', e);
+            return { success: false, error: 'Sin conexión: la tarea no se eliminó del servidor.' };
         }
-        // Si el servidor no confirmó el borrado (error HTTP o excepción de red), aplicarlo localmente
-        const arr = this._lsGet().filter(t => t.id !== id);
-        this._lsSave(arr);
-        this._tareas = arr;
-        return { success: true };
     }
 
     // ── Toggle completada ─────────────────────────────────────────────────────

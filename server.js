@@ -9,6 +9,8 @@ import path from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { createHash, randomBytes } from 'crypto';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 
 dotenv.config();
 
@@ -32,8 +34,42 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(json({ limit: '100kb' }));
-app.use(express.static(path.join(__dirname, '/')));
+// Publicar únicamente los recursos del frontend. Nunca exponer .env,
+// serviceAccountKey.json, logs, código del servidor ni archivos internos.
+app.use('/assets', express.static(path.join(__dirname, 'assets'), {
+  dotfiles: 'deny',
+  index: false,
+  fallthrough: false,
+}));
+
+function requestOriginAllowed(req) {
+  const origin = req.get('origin');
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  const hostOrigin = `${req.protocol}://${req.get('host')}`;
+  return origin === hostOrigin;
+}
+
+function requireTrustedOrigin(req, res, next) {
+  if (!requestOriginAllowed(req)) {
+    return res.status(403).json({ success: false, error: 'Origen de solicitud no permitido.' });
+  }
+  next();
+}
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => ['session', 'logout'].includes(req.query.action || req.body?.action),
+  message: { success: false, error: 'Demasiados intentos. Intenta nuevamente en 15 minutos.' },
+});
 
 const serviceAccountPath = path.resolve(
   __dirname,
@@ -102,6 +138,11 @@ async function createSession(res, user) {
   res.setHeader('Set-Cookie', sessionCookie(token));
 }
 
+async function revokeSession(req) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (token) await db.collection('_sessions').doc(hashSessionToken(token)).delete();
+}
+
 async function readSession(req) {
   const token = parseCookies(req)[SESSION_COOKIE];
   if (!token) return null;
@@ -137,6 +178,21 @@ async function requireAuth(req, res, next) {
     res.status(500).json({ success: false, error: 'No se pudo validar la sesión.' });
   }
 }
+
+async function cleanupExpiredSessions() {
+  const expired = await db.collection('_sessions').where('expires_at', '<=', Date.now()).limit(200).get();
+  if (expired.empty) return;
+  const batch = db.batch();
+  expired.docs.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+cleanupExpiredSessions().catch(error => console.error('SESSION CLEANUP ERROR:', error.message));
+const sessionCleanupTimer = setInterval(
+  () => cleanupExpiredSessions().catch(error => console.error('SESSION CLEANUP ERROR:', error.message)),
+  60 * 60 * 1000
+);
+sessionCleanupTimer.unref();
 
 // Verificar conexión a Firebase al arrancar
 db.collection('_healthcheck').limit(1).get()
@@ -218,7 +274,7 @@ app.get('/api/categorias', async (req, res) => {
 // ── Tareas ───────────────────────────────────────────────────────────────
 
 // Todas las operaciones persistentes requieren una sesión válida.
-app.use('/api/tareas', requireAuth);
+app.use('/api/tareas', requireTrustedOrigin, requireAuth);
 
 app.get('/api/tareas', async (req, res) => {
   try {
@@ -364,7 +420,7 @@ app.delete('/api/tareas', async (req, res) => {
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 
-app.post('/api/auth', async (req, res) => {
+app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
   try {
     const action = req.query.action || req.body.action;
     const { nombre = '', email = '', password = '' } = req.body;
@@ -380,8 +436,7 @@ app.post('/api/auth', async (req, res) => {
     }
 
     if (action === 'logout') {
-      const token = parseCookies(req)[SESSION_COOKIE];
-      if (token) await db.collection('_sessions').doc(hashSessionToken(token)).delete();
+      await revokeSession(req);
       res.setHeader('Set-Cookie', sessionCookie('', 0));
       return res.json({ success: true });
     }
@@ -391,7 +446,18 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const existing = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, error: 'Introduce un correo válido.' });
+      }
+      if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+        return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres y un máximo de 72 bytes.' });
+      }
+      if (nombre.trim().length > 100 || normalizedEmail.length > 254) {
+        return res.status(400).json({ success: false, error: 'Nombre o correo demasiado largo.' });
+      }
+
+      const existing = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (!existing.empty) {
         return res.status(409).json({ success: false, error: 'Este correo ya está registrado.' });
       }
@@ -401,7 +467,7 @@ app.post('/api/auth', async (req, res) => {
       const usuario = {
         id,
         nombre: nombre.trim(),
-        email: email.trim(),
+        email: normalizedEmail,
         password_hash: hash,
         fecha_creacion: new Date().toISOString(),
       };
@@ -416,11 +482,17 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.length > 254 || Buffer.byteLength(password, 'utf8') > 72) {
+        return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
+      }
+      const snap = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (snap.empty) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
       const user = snap.docs[0].data();
-      const match = await bcrypt.compare(password, user.password_hash);
+      const match = typeof user.password_hash === 'string'
+        ? await bcrypt.compare(password, user.password_hash)
+        : false;
       if (!match) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
       const publicUser = { id: user.id, nombre: user.nombre, email: user.email };
@@ -437,16 +509,13 @@ app.post('/api/auth', async (req, res) => {
     }
   } catch (error) {
     console.error('AUTH ERROR:', error.message, error.stack);
-    res.status(500).json({
-      success: false,
-      error: 'Error en auth: ' + error.message
-    });
+    res.status(500).json({ success: false, error: 'No se pudo completar la autenticación.' });
   }
 });
 
 // ── Notificaciones ───────────────────────────────────────────────────────
 
-app.post('/api/notify', async (req, res) => {
+app.post('/api/notify', requireTrustedOrigin, requireAuth, async (req, res) => {
   try {
     const { email = '', asunto = 'Notificación TaskMaster', mensaje = '' } = req.body;
     if (!email) {

@@ -59,6 +59,43 @@ integraciones/           → microservicio de integraciones externas
 - El acceso simulado con Google está deshabilitado hasta configurar una verificación OAuth
   real; las autorizaciones Google/Microsoft de `integraciones/` son independientes.
 - Las sesiones duran siete días. Cerrar sesión elimina el registro en Firestore y vence la cookie.
+- Los datos locales se separan entre `tm_tareas_guest` y `tm_tareas_user_<id>` para que
+  cerrar sesión no muestre las tareas almacenadas en caché de otra cuenta.
+- Los errores `401`, `403` y de red no se convierten en operaciones exitosas: solamente
+  el modo invitado trabaja de forma local.
+- El servidor publica únicamente `index.html` y `assets/`; las credenciales, archivos
+  `.env`, logs y código interno nunca se sirven como archivos estáticos.
+- Los endpoints de autenticación tienen límite de intentos, validación de email y una
+  contraseña de al menos 8 caracteres (máximo 72 bytes, límite seguro de bcrypt).
 
 Para producción, configura `NODE_ENV=production`, utiliza HTTPS y define `CORS_ORIGIN`
 con el dominio exacto de la aplicación.
+
+## Seguridad de integraciones OAuth
+
+El microservicio de `integraciones/` valida la misma cookie `tm_session` de la aplicación
+principal. En desarrollo ambos servicios deben abrirse con el mismo hostname (por ejemplo,
+`localhost`, sin mezclarlo con `127.0.0.1`). En producción se recomienda publicarlos detrás
+del mismo dominio mediante un proxy inverso.
+
+- Cada conexión Google o Microsoft pertenece al `usuario_id` autenticado.
+- OAuth usa un valor `state` aleatorio, almacenado por diez minutos y consumido una sola vez.
+- Los access y refresh tokens se cifran con AES-256-GCM antes de guardarse en Firestore.
+- Calendar, Drive, Classroom, OneDrive, Teams, email e ICS requieren sesión.
+- Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
+- La interfaz permite desconectar cada proveedor y borrar sus tokens almacenados.
+
+Antes de iniciar el microservicio genera su clave de cifrado:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Copia el resultado en `integraciones/.env` como `OAUTH_TOKEN_ENCRYPTION_KEY`. Mantén esa
+clave fuera de Git y respaldada en un gestor de secretos: si se pierde, los tokens existentes
+no podrán descifrarse y cada usuario deberá volver a conectar sus cuentas.
+
+Las versiones anteriores guardaban documentos compartidos llamados
+`int_oauth_tokens/google` e `int_oauth_tokens/microsoft`. El código nuevo no los utiliza.
+Antes de producción revoca esas autorizaciones en Google/Microsoft y elimina esos dos
+documentos antiguos de Firestore para retirar cualquier token heredado sin cifrar.

@@ -111,7 +111,7 @@ class AuthView {
       const data = await res.json();
       if (data.success) {
         // Guardar usuario localmente
-        const user = { id: data.user_id || (data.user && data.user.id) || null, nombre: nombre || (data.user && data.user.nombre) || email, email };
+        const user = data.user;
         localStorage.setItem('tm_user', JSON.stringify(user));
         this.app.setUser(user);
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
@@ -129,7 +129,12 @@ class AuthView {
 
   async _restoreUser() {
     try {
-      const res = await fetch('api/auth?action=session', { credentials: 'include' });
+      const res = await fetch('api/auth?action=session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
       const data = await res.json();
       if (res.ok && data.success && data.user) {
         localStorage.setItem('tm_user', JSON.stringify(data.user));
