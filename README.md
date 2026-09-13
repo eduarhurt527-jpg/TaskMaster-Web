@@ -45,3 +45,20 @@ assets/js/view/          → capa View (DOM, eventos, botones)
 assets/js/app.js         → coordinador de la app (App)
 integraciones/           → microservicio de integraciones externas
 ```
+
+## Autenticación y modo invitado
+
+- El registro y el inicio de sesión local generan una cookie `tm_session` con los atributos
+  `HttpOnly`, `SameSite=Lax` y `Secure` cuando `NODE_ENV=production`.
+- El valor sin procesar de la cookie nunca se guarda en Firestore: el servidor almacena
+  solamente su hash SHA-256 en la colección interna `_sessions`.
+- Las rutas `/api/tareas` obtienen el propietario desde la sesión validada. El backend no
+  acepta `usuario_id` como prueba de identidad.
+- Las tareas de un invitado permanecen exclusivamente en el `localStorage` de su navegador
+  y no se mezclan con las cuentas registradas.
+- El acceso simulado con Google está deshabilitado hasta configurar una verificación OAuth
+  real; las autorizaciones Google/Microsoft de `integraciones/` son independientes.
+- Las sesiones duran siete días. Cerrar sesión elimina el registro en Firestore y vence la cookie.
+
+Para producción, configura `NODE_ENV=production`, utiliza HTTPS y define `CORS_ORIGIN`
+con el dominio exacto de la aplicación.
