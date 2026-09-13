@@ -9,6 +9,7 @@ class App {
   constructor() {
     this.user = null;
     this.accessMode = localStorage.getItem('tm_access_mode') === 'guest' ? 'guest' : 'public';
+    this.screen = 'public';
     // Instanciar Views
     this.homeView      = new HomeView(taskViewModel);
     this.dashboardView = new DashboardView(taskViewModel);
@@ -187,6 +188,8 @@ class App {
     if (publicLogin) publicLogin.addEventListener('click', () => this.authView.openMode('login'));
     const publicRegister = document.getElementById('btn-public-register');
     if (publicRegister) publicRegister.addEventListener('click', () => this.authView.openMode('register'));
+    const publicWorkspace = document.getElementById('btn-public-workspace');
+    if (publicWorkspace) publicWorkspace.addEventListener('click', () => this.enterWorkspace());
     const btnHeroReg = document.getElementById('btn-hero-registrarse');
     if (btnHeroReg) btnHeroReg.addEventListener('click', () => this.authView.openMode('register'));
     const btnGoogle = document.getElementById('btn-google-login');
@@ -266,8 +269,6 @@ class App {
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) btnLogout.style.display = user ? '' : 'none';
 
-    const hero = document.getElementById('hero-landing');
-    if (hero) hero.style.display = user ? 'none' : '';
   }
 
   _canUseWorkspace() {
@@ -283,6 +284,7 @@ class App {
     this.user = null;
     this.accessMode = 'guest';
     localStorage.setItem('tm_access_mode', 'guest');
+    this.screen = 'workspace';
     this._applyAccessState();
     await taskViewModel.cargarTareas();
     this.homeView.render();
@@ -291,15 +293,23 @@ class App {
   }
 
   showPublic() {
-    this.user = null;
-    this.accessMode = 'public';
-    localStorage.removeItem('tm_access_mode');
+    this.screen = 'public';
+    this._applyAccessState();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  enterWorkspace() {
+    if (!this._canUseWorkspace()) return this._requestAccess();
+    this.screen = 'workspace';
     this._applyAccessState();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   _applyAccessState() {
+    // Una pantalla de trabajo nunca puede permanecer abierta sin invitado o cuenta.
+    if (!this._canUseWorkspace()) this.screen = 'public';
     document.body.dataset.access = this.accessMode;
+    document.body.dataset.screen = this.screen;
     const badge = document.getElementById('access-badge');
     if (badge) {
       badge.textContent = this.accessMode === 'guest' ? 'Modo invitado' : 'Cuenta sincronizada';
@@ -309,6 +319,15 @@ class App {
       el.classList.toggle('is-locked', this.accessMode !== 'authenticated');
       el.setAttribute('aria-disabled', String(this.accessMode !== 'authenticated'));
     });
+    const publicLogin = document.getElementById('btn-public-login');
+    const publicRegister = document.getElementById('btn-public-register');
+    const publicWorkspace = document.getElementById('btn-public-workspace');
+    if (publicLogin) publicLogin.hidden = this.accessMode === 'authenticated';
+    if (publicRegister) publicRegister.hidden = this.accessMode === 'authenticated';
+    if (publicWorkspace) {
+      publicWorkspace.hidden = this.accessMode === 'public';
+      publicWorkspace.textContent = this.accessMode === 'guest' ? 'Volver al panel' : 'Ir a mi panel';
+    }
   }
 
   _updateCountdown() {

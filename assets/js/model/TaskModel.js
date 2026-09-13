@@ -43,7 +43,10 @@ class TaskModel {
 
     _expireSession() {
         localStorage.removeItem('tm_user');
-        if (window.app) window.app.setUser(null);
+        if (window.app) {
+            window.app.setUser(null);
+            window.app.showPublic();
+        }
     }
 
     // ── GET: todas las tareas ─────────────────────────────────────────────────

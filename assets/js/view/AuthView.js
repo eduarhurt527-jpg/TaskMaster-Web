@@ -114,6 +114,7 @@ class AuthView {
         const user = data.user;
         localStorage.setItem('tm_user', JSON.stringify(user));
         this.app.setUser(user);
+        this.app.enterWorkspace();
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (this.app && this.app.homeView) this.app.homeView.render();
         this.app.showToast(this.mode === 'login' ? 'Bienvenido' : 'Cuenta creada', 'success');
@@ -140,6 +141,9 @@ class AuthView {
         localStorage.setItem('tm_user', JSON.stringify(data.user));
         this.app.setUser(data.user);
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
+        if (new URLSearchParams(window.location.search).get('login') === 'google') {
+          this.app.enterWorkspace();
+        }
         this._handleOAuthResult();
         return;
       }
@@ -181,6 +185,7 @@ class AuthView {
     }
     localStorage.removeItem('tm_user');
     this.app.setUser(null);
+    this.app.showPublic();
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada
     if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
     if (this.app && this.app.homeView) this.app.homeView.render();

@@ -1621,11 +1621,10 @@ img {
   .button, .btn { width: 100%; }
 }
 /* ── Access-aware UX shell ─────────────────────────────────────────────── */
+[hidden] { display: none !important; }
 [data-workspace-only] { display: none !important; }
-body[data-access="guest"] [data-public-only],
-body[data-access="authenticated"] [data-public-only] { display: none !important; }
-body[data-access="guest"] [data-workspace-only],
-body[data-access="authenticated"] [data-workspace-only] { display: revert !important; }
+body[data-screen="workspace"] [data-public-only] { display: none !important; }
+body[data-screen="workspace"] [data-workspace-only] { display: revert !important; }
 
 .public-header {
   position: sticky;

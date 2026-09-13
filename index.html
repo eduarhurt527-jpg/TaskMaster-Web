@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="assets/css/main.css" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 </head>
-<body data-access="public">
+<body data-access="public" data-screen="public">
 
   <header class="public-header" data-public-only>
     <a class="public-brand" href="#inicio" aria-label="TaskMaster, volver al inicio">
@@ -24,6 +24,7 @@
     <div class="public-actions">
       <button class="btn btn--ghost" id="btn-public-login">Iniciar sesión</button>
       <button class="btn btn--primary" id="btn-public-register">Crear cuenta</button>
+      <button class="btn btn--primary" id="btn-public-workspace" hidden>Ir a mi panel</button>
     </div>
   </header>
 
@@ -37,6 +38,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="btn btn--ghost" data-action="public">Página de inicio</button>
         <span class="access-badge" id="access-badge">Modo invitado</span>
         <div>
           <div class="welcome" id="header-welcome">Bienvenido</div>
