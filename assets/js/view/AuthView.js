@@ -131,6 +131,29 @@ class AuthView {
   }
 
   async _restoreUser() {
+    const params = new URLSearchParams(window.location.search);
+    const shouldRestore = params.get('workspace') === '1' || params.get('login') === 'google';
+
+    // `/` representa la portada pública. No reutilizar allí la cuenta de una visita
+    // anterior, especialmente en equipos compartidos.
+    if (!shouldRestore) {
+      try {
+        await fetch('api/auth?action=logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+      } catch (e) {
+        console.warn('No se pudo limpiar la sesión anterior del servidor', e);
+      }
+      sessionStorage.removeItem('tm_user');
+      sessionStorage.removeItem('tm_access_mode');
+      this.app.setUser(null);
+      this._handleOAuthResult();
+      return;
+    }
+
     try {
       const res = await fetch('api/auth?action=session', {
         method: 'POST',
@@ -154,6 +177,13 @@ class AuthView {
     }
     sessionStorage.removeItem('tm_user');
     this.app.setUser(null);
+    if (this.app.accessMode === 'guest' && params.get('workspace') === '1') {
+      this.app.enterWorkspace();
+    } else {
+      params.delete('workspace');
+      const query = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
     this._handleOAuthResult();
   }
 
@@ -170,6 +200,7 @@ class AuthView {
     }
     params.delete('login');
     params.delete('auth_error');
+    if (this.app.accessMode === 'authenticated') params.set('workspace', '1');
     const query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
   }

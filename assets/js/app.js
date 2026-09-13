@@ -223,7 +223,11 @@ class App {
       btn.addEventListener('click', () => this.enterGuest());
     });
     document.querySelectorAll('[data-action="public"]').forEach(btn => {
-      btn.addEventListener('click', () => this.showPublic());
+      btn.addEventListener('click', () => {
+        // La portada es siempre anónima: salir desde el panel también revoca la sesión.
+        if (this.accessMode === 'authenticated') this.authView.logout();
+        else this.showPublic();
+      });
     });
     document.querySelectorAll('[data-requires-account]').forEach(el => {
       el.addEventListener('click', event => {
@@ -320,6 +324,9 @@ class App {
   showPublic() {
     this.recordingView?.cleanupStream();
     this.screen = 'public';
+    const url = new URL(window.location.href);
+    url.searchParams.delete('workspace');
+    window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
     this._applyAccessState();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -335,6 +342,9 @@ class App {
   enterWorkspace() {
     if (!this._canUseWorkspace()) return this._requestAccess();
     this.screen = 'workspace';
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace', '1');
+    window.history.replaceState({}, '', url.pathname + `?${url.searchParams.toString()}`);
     this._applyAccessState();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
