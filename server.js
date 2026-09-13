@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { createHash, randomBytes } from 'crypto';
 
 dotenv.config();
 
@@ -17,8 +18,19 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(json());
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origen no permitido por CORS'));
+  },
+  credentials: true,
+}));
+app.use(json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '/')));
 
 const serviceAccountPath = path.resolve(
@@ -50,6 +62,79 @@ try {
 }
 
 const db = getFirestore(firebaseApp);
+
+// ── Sesiones seguras ────────────────────────────────────────────────────────
+
+const SESSION_COOKIE = 'tm_session';
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function parseCookies(req) {
+  const result = {};
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key) result[key] = decodeURIComponent(value);
+  }
+  return result;
+}
+
+function hashSessionToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function sessionCookie(token, maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000)) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+async function createSession(res, user) {
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = hashSessionToken(token);
+  await db.collection('_sessions').doc(tokenHash).set({
+    user_id: Number(user.id),
+    created_at: new Date().toISOString(),
+    expires_at: Date.now() + SESSION_TTL_MS,
+  });
+  res.setHeader('Set-Cookie', sessionCookie(token));
+}
+
+async function readSession(req) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (!token) return null;
+
+  const ref = db.collection('_sessions').doc(hashSessionToken(token));
+  const sessionDoc = await ref.get();
+  if (!sessionDoc.exists) return null;
+
+  const session = sessionDoc.data();
+  if (!session.expires_at || session.expires_at <= Date.now()) {
+    await ref.delete();
+    return null;
+  }
+
+  const userDoc = await db.collection('usuarios').doc(String(session.user_id)).get();
+  if (!userDoc.exists) {
+    await ref.delete();
+    return null;
+  }
+
+  const user = userDoc.data();
+  return { id: user.id, nombre: user.nombre, email: user.email };
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    const user = await readSession(req);
+    if (!user) return res.status(401).json({ success: false, error: 'Debes iniciar sesión.' });
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('SESSION ERROR:', error.message);
+    res.status(500).json({ success: false, error: 'No se pudo validar la sesión.' });
+  }
+}
 
 // Verificar conexión a Firebase al arrancar
 db.collection('_healthcheck').limit(1).get()
@@ -130,6 +215,9 @@ app.get('/api/categorias', async (req, res) => {
 
 // ── Tareas ───────────────────────────────────────────────────────────────
 
+// Todas las operaciones persistentes requieren una sesión válida.
+app.use('/api/tareas', requireAuth);
+
 app.get('/api/tareas', async (req, res) => {
   try {
     const [tareasSnap, materiasSnap] = await Promise.all([
@@ -143,9 +231,7 @@ app.get('/api/tareas', async (req, res) => {
       materiasMap[m.id] = m;
     });
 
-    // Filtrar por usuario cuando el cliente lo indica; las tareas antiguas
-    // (usuario_id null, creadas antes del soporte multiusuario) siguen visibles
-    const usuarioId = req.query.usuario_id ? Number(req.query.usuario_id) : null;
+    const usuarioId = Number(req.user.id);
 
     const tareas = tareasSnap.docs
       .map(d => {
@@ -157,7 +243,7 @@ app.get('/api/tareas', async (req, res) => {
           materia_color: m ? m.color : null,
         };
       })
-      .filter(t => usuarioId === null || t.usuario_id == null || t.usuario_id === usuarioId)
+      .filter(t => Number(t.usuario_id) === usuarioId)
       .sort((a, b) => {
         if (a.completada !== b.completada) return a.completada - b.completada;
         return new Date(a.fecha_limite) - new Date(b.fecha_limite);
@@ -201,7 +287,7 @@ app.post('/api/tareas', async (req, res) => {
       min_anticipacion: Number(min_anticipacion),
       aviso_enviado: 0,
       nota: null,
-      usuario_id: usuario_id != null ? Number(usuario_id) : null,
+      usuario_id: Number(req.user.id),
       fecha_creacion: new Date().toISOString(),
     };
 
@@ -234,6 +320,10 @@ app.put('/api/tareas', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
     }
 
+    if (Number(doc.data().usuario_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, error: 'No puedes modificar una tarea de otro usuario.' });
+    }
+
     await ref.update(updates);
     res.json({ success: true });
   } catch (error) {
@@ -246,7 +336,16 @@ app.delete('/api/tareas', async (req, res) => {
     const id = Number(req.body.id || 0);
     if (!id) return res.status(400).json({ success: false, error: 'ID requerido.' });
 
-    await db.collection('tareas').doc(String(id)).delete();
+    const tareaRef = db.collection('tareas').doc(String(id));
+    const tareaDoc = await tareaRef.get();
+    if (!tareaDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
+    }
+    if (Number(tareaDoc.data().usuario_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, error: 'No puedes eliminar una tarea de otro usuario.' });
+    }
+
+    await tareaRef.delete();
 
     const alertasSnap = await db.collection('alertas').where('tarea_id', '==', id).get();
     if (!alertasSnap.empty) {
@@ -268,8 +367,21 @@ app.post('/api/auth', async (req, res) => {
     const action = req.query.action || req.body.action;
     const { nombre = '', email = '', password = '' } = req.body;
 
-    if (!['login', 'register', 'google'].includes(action)) {
+    if (!['login', 'register', 'google', 'session', 'logout'].includes(action)) {
       return res.status(405).json({ success: false, error: 'Acción no soportada.' });
+    }
+
+    if (action === 'session') {
+      const user = await readSession(req);
+      if (!user) return res.status(401).json({ success: false, error: 'Sesión no válida.' });
+      return res.json({ success: true, user });
+    }
+
+    if (action === 'logout') {
+      const token = parseCookies(req)[SESSION_COOKIE];
+      if (token) await db.collection('_sessions').doc(hashSessionToken(token)).delete();
+      res.setHeader('Set-Cookie', sessionCookie('', 0));
+      return res.json({ success: true });
     }
 
     if (action === 'register') {
@@ -292,7 +404,9 @@ app.post('/api/auth', async (req, res) => {
         fecha_creacion: new Date().toISOString(),
       };
       await db.collection('usuarios').doc(String(id)).set(usuario);
-      return res.json({ success: true, user_id: id });
+      const publicUser = { id, nombre: usuario.nombre, email: usuario.email };
+      await createSession(res, publicUser);
+      return res.status(201).json({ success: true, user_id: id, user: publicUser });
     }
 
     if (action === 'login') {
@@ -307,30 +421,17 @@ app.post('/api/auth', async (req, res) => {
       const match = await bcrypt.compare(password, user.password_hash);
       if (!match) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
-      return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
+      const publicUser = { id: user.id, nombre: user.nombre, email: user.email };
+      await createSession(res, publicUser);
+      return res.json({ success: true, user: publicUser });
     }
 
     if (action === 'google') {
-      if (!email.trim()) {
-        return res.status(400).json({ success: false, error: 'Campos incompletos' });
-      }
+      return res.status(501).json({
+        success: false,
+        error: 'El acceso con Google está deshabilitado hasta configurar OAuth real.'
+      });
 
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
-      if (!snap.empty) {
-        const user = snap.docs[0].data();
-        return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
-      }
-
-      const id = await nextId('usuarios');
-      const usuario = {
-        id,
-        nombre: nombre.trim() || email.trim().split('@')[0],
-        email: email.trim(),
-        password_hash: null,
-        fecha_creacion: new Date().toISOString(),
-      };
-      await db.collection('usuarios').doc(String(id)).set(usuario);
-      return res.json({ success: true, user: { id: usuario.id, nombre: usuario.nombre, email: usuario.email } });
     }
   } catch (error) {
     console.error('AUTH ERROR:', error.message, error.stack);
