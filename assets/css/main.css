@@ -1625,6 +1625,7 @@ img {
 [data-workspace-only] { display: none !important; }
 body[data-screen="workspace"] [data-public-only] { display: none !important; }
 body[data-screen="workspace"] [data-workspace-only] { display: revert !important; }
+body[data-screen="workspace"] .fab[data-workspace-only] { display: flex !important; }
 
 .public-header {
   position: sticky;
