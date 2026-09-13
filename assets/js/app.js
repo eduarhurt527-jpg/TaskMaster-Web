@@ -232,6 +232,18 @@ class App {
         this.showToast('Esta función necesita una cuenta para mantener tus datos e integraciones protegidos.', 'warning');
       });
     });
+    const manageConnections = document.getElementById('btn-manage-connections');
+    if (manageConnections) manageConnections.addEventListener('click', () => {
+      if (this.accessMode !== 'authenticated') {
+        this.showToast('Inicia sesión o crea una cuenta para administrar conexiones.', 'warning');
+        this.authView.openMode('login');
+        return;
+      }
+      this._cambiarVista('integrations');
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector('.nav-btn[data-view="integrations"]')?.classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     const btnCarga = document.getElementById('btn-carga-semanal');
     if (btnCarga) btnCarga.addEventListener('click', () => {
       this._cambiarVista('overview');
