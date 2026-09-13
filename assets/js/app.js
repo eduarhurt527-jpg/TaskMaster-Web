@@ -19,6 +19,7 @@ class App {
     this.modalView     = new ModalView(taskViewModel);
     this.pomodoroView  = new PomodoroView(taskViewModel);
     this.authView      = new AuthView(this);
+    this.recordingView = new RecordingView(this);
 
     this._vistaActual  = 'home';
 
@@ -167,7 +168,22 @@ class App {
         this._cambiarVista(vista);
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        if (btn.dataset.scroll) {
+          window.setTimeout(() => document.getElementById(btn.dataset.scroll)?.scrollIntoView({ behavior: 'smooth' }), 0);
+        }
       });
+    });
+
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    if (sidebarToggle) sidebarToggle.addEventListener('click', () => {
+      const collapsed = document.body.classList.toggle('sidebar-collapsed');
+      sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+      sidebarToggle.setAttribute('aria-label', collapsed ? 'Expandir menú' : 'Contraer menú');
+    });
+    const sidebarLogout = document.getElementById('sidebar-logout');
+    if (sidebarLogout) sidebarLogout.addEventListener('click', () => {
+      if (this.accessMode === 'authenticated') this.authView.logout();
+      else this.exitGuest();
     });
 
     // FAB: abrir modal nueva tarea
@@ -299,9 +315,18 @@ class App {
   }
 
   showPublic() {
+    this.recordingView?.cleanupStream();
     this.screen = 'public';
     this._applyAccessState();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  exitGuest() {
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_access_mode');
+    this.user = null;
+    this.accessMode = 'public';
+    this.showPublic();
   }
 
   enterWorkspace() {

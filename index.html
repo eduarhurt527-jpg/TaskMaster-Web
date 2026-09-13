@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TaskMaster - Avance 100% Completo</title>
-  <link rel="stylesheet" href="assets/css/main.css" />
+  <link rel="stylesheet" href="assets/css/main.css?v=20260913-3" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body data-access="public" data-screen="public">
@@ -81,6 +81,20 @@
       </div>
     </div>
   </header>
+
+  <aside class="workspace-sidebar" id="workspace-sidebar" data-workspace-only aria-label="Navegación del espacio de trabajo">
+    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="true" aria-label="Contraer menú">☰</button>
+    <nav class="workspace-sidebar__nav">
+      <button class="sidebar-link nav-btn active" data-view="home" title="Inicio"><span>⌂</span><b>Inicio</b></button>
+      <button class="sidebar-link nav-btn" data-view="overview" title="Mi panel"><span>▦</span><b>Mi panel</b></button>
+      <button class="sidebar-link nav-btn" data-view="home" data-scroll="task-list" title="Mis tareas"><span>✓</span><b>Mis tareas</b></button>
+      <button class="sidebar-link nav-btn" data-view="overview" title="Calendario"><span>□</span><b>Calendario</b></button>
+      <button class="sidebar-link nav-btn" data-view="integrations" title="Integraciones"><span>⌘</span><b>Integraciones</b></button>
+      <button class="sidebar-link nav-btn" data-view="recordings" title="Grabaciones"><span>●</span><b>Grabaciones</b></button>
+      <button class="sidebar-link nav-btn" data-view="settings" title="Configuración"><span>⚙</span><b>Configuración</b></button>
+    </nav>
+    <button class="sidebar-link sidebar-link--logout" id="sidebar-logout" type="button" title="Cerrar sesión"><span>↪</span><b>Cerrar sesión</b></button>
+  </aside>
 
   <main class="app-main">
 
@@ -231,12 +245,12 @@
           <p>Conecta tu calendario, clases, archivos y equipo cuando tengas una cuenta.</p>
         </div>
         <div class="integration-showcase">
-          <article><span class="app-mark app-mark--google">G</span><h3>Google Calendar</h3><p>Convierte fechas límite en eventos.</p></article>
-          <article><span class="app-mark app-mark--drive">△</span><h3>Google Drive</h3><p>Vincula archivos a cada tarea.</p></article>
-          <article><span class="app-mark app-mark--classroom">C</span><h3>Classroom</h3><p>Importa trabajos y entregas.</p></article>
-          <article><span class="app-mark app-mark--teams">T</span><h3>Microsoft Teams</h3><p>Comparte tareas con tu equipo.</p></article>
-          <article><span class="app-mark app-mark--onedrive">☁</span><h3>OneDrive</h3><p>Mantén documentos a mano.</p></article>
-          <article><span class="app-mark app-mark--mail">@</span><h3>Recordatorios</h3><p>Envía avisos importantes.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/google-calendar.svg" alt="" width="46" height="46"><h3>Google Calendar</h3><p>Convierte fechas límite en eventos.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/google-drive.svg" alt="" width="46" height="46"><h3>Google Drive</h3><p>Vincula archivos a cada tarea.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/google-classroom.svg" alt="" width="46" height="46"><h3>Classroom</h3><p>Importa trabajos y entregas.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/teams.svg" alt="" width="46" height="46"><h3>Microsoft Teams</h3><p>Comparte tareas con tu equipo.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/onedrive.svg" alt="" width="46" height="46"><h3>OneDrive</h3><p>Mantén documentos a mano.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/gmail.svg" alt="" width="46" height="46"><h3>Recordatorios</h3><p>Envía avisos importantes.</p></article>
         </div>
       </section>
 
@@ -246,8 +260,8 @@
           <a class="btn btn--secondary" href="http://localhost:3002" data-requires-account>Administrar conexiones</a>
         </div>
         <div class="workspace-apps">
-          <div><span class="app-mark app-mark--google">G</span><strong>Google</strong><small>Calendar · Drive · Classroom</small></div>
-          <div><span class="app-mark app-mark--teams">M</span><strong>Microsoft</strong><small>OneDrive · Teams</small></div>
+          <div><img class="service-logo" src="assets/img/integrations/google-calendar.svg" alt="" width="46" height="46"><strong>Google</strong><small>Calendar · Drive · Classroom</small></div>
+          <div><img class="service-logo" src="assets/img/integrations/teams.svg" alt="" width="46" height="46"><strong>Microsoft</strong><small>OneDrive · Teams</small></div>
           <p class="guest-lock-message">Inicia sesión para conectar aplicaciones de manera segura.</p>
         </div>
       </section>
@@ -356,6 +370,49 @@
           <div class="materia-progress" id="materia-progress"></div>
         </div>
       </div>
+    </section>
+
+    <section id="view-integrations" class="view workspace-page">
+      <div class="workspace-page__heading">
+        <div><p class="section-label">APLICACIONES</p><h2>Integraciones</h2><p>Reúne tus herramientas de estudio y trabajo. Solo una conexión confirmada por el servidor se presenta como conectada.</p></div>
+      </div>
+      <p class="integration-auth-notice" id="integration-auth-notice">Inicia sesión o crea una cuenta para conectar herramientas. En modo invitado puedes conocerlas, pero no autorizarlas.</p>
+      <div class="integration-grid">
+        <article class="integration-card" data-auth-only><img src="assets/img/integrations/google-calendar.svg" alt="Google Calendar" width="42" height="42"><div><h3>Google Calendar</h3><p>Convierte fechas límite en eventos y recordatorios.</p><small>Permiso: calendario</small></div><span class="integration-status integration-status--available">Disponible</span><a class="btn btn--secondary integration-action" href="http://localhost:3002" data-requires-account>Administrar</a></article>
+        <article class="integration-card"><img src="assets/img/integrations/google-drive.svg" alt="Google Drive" width="42" height="42"><div><h3>Google Drive</h3><p>Adjunta documentos a una tarea.</p><small>Requiere implementación OAuth específica</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/google-classroom.svg" alt="Google Classroom" width="42" height="42"><div><h3>Google Classroom</h3><p>Centraliza actividades y fechas de entrega.</p><small>Requiere API de Classroom</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/gmail.svg" alt="Gmail" width="42" height="42"><div><h3>Gmail</h3><p>Prepara recordatorios relacionados con tus tareas.</p><small>Requiere API de Gmail</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/onedrive.svg" alt="Microsoft OneDrive" width="42" height="42"><div><h3>OneDrive</h3><p>Mantén archivos de trabajo accesibles.</p><small>Requiere Microsoft Graph</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/teams.svg" alt="Microsoft Teams" width="42" height="42"><div><h3>Microsoft Teams</h3><p>Vincula tareas con el trabajo del equipo.</p><small>Requiere Microsoft Graph</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+      </div>
+    </section>
+
+    <section id="view-recordings" class="view workspace-page">
+      <div class="workspace-page__heading"><div><p class="section-label">CAPTURA LOCAL</p><h2>Grabaciones</h2><p>Graba pantalla o cámara con autorización explícita. TaskMaster no sube el archivo: permanece en tu dispositivo.</p></div></div>
+      <div class="recorder-layout">
+        <div class="recorder-options" aria-label="Seleccionar fuente">
+          <button class="record-source" data-record-source="screen">▣<span>Grabar pantalla</span></button>
+          <button class="record-source" data-record-source="camera">◉<span>Usar cámara</span></button>
+          <button class="record-source" data-record-source="screen-mic">▣<span>Pantalla y micrófono</span></button>
+          <button class="record-source" data-record-source="camera-mic">◉<span>Cámara y micrófono</span></button>
+        </div>
+        <div class="recorder-studio">
+          <div class="recorder-preview"><video id="recorder-video" autoplay muted playsinline></video><div class="recorder-placeholder" id="recorder-placeholder">Selecciona una fuente para solicitar permiso y preparar la vista previa.</div><span class="recording-indicator" id="recording-indicator" hidden><i></i> Grabando <b id="recording-timer">00:00</b></span></div>
+          <div class="recorder-controls">
+            <button class="btn btn--primary" id="record-start" disabled>Iniciar</button>
+            <button class="btn btn--secondary" id="record-pause" disabled>Pausar</button>
+            <button class="btn btn--danger" id="record-stop" disabled>Detener</button>
+            <button class="btn btn--ghost" id="record-discard" disabled>Descartar</button>
+            <a class="btn btn--secondary" id="record-download" hidden>Descargar WebM</a>
+          </div>
+          <p class="recorder-status" id="recorder-status" role="status" aria-live="polite">La cámara, pantalla y el micrófono nunca se activan automáticamente.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view workspace-page">
+      <div class="workspace-page__heading"><div><p class="section-label">PREFERENCIAS</p><h2>Configuración</h2><p>La identidad y los tokens se administran de forma segura durante la sesión. Ninguna contraseña se guarda en el navegador.</p></div></div>
+      <div class="settings-card"><h3>Privacidad de la sesión</h3><p>Cierra sesión cuando termines, especialmente si utilizas un equipo compartido.</p><button class="btn btn--ghost" data-action="public">Ver página pública</button></div>
     </section>
 
   </main>
@@ -572,11 +629,12 @@
   <script src="assets/js/model/MateriaModel.js"></script>
   <script src="assets/js/model/QuickAddParser.js"></script>
   <script src="assets/js/viewmodel/TaskViewModel.js"></script>
-  <script src="assets/js/view/HomeView.js"></script>
+  <script src="assets/js/view/HomeView.js?v=20260913-3"></script>
   <script src="assets/js/view/DashboardView.js"></script>
   <script src="assets/js/view/ModalView.js?v=20260913-2"></script>
   <script src="assets/js/view/PomodoroView.js"></script>
   <script src="assets/js/view/AuthView.js?v=20260913-2"></script>
-  <script src="assets/js/app.js?v=20260913-2"></script>
+  <script src="assets/js/view/RecordingView.js?v=20260913-3"></script>
+  <script src="assets/js/app.js?v=20260913-3"></script>
 </body>
 </html>
