@@ -34,7 +34,7 @@ class TaskModel {
     // ── Usuario en sesión (para asociar y filtrar tareas) ─────────────────────
     _userId() {
         try {
-            const u = JSON.parse(localStorage.getItem('tm_user') || 'null');
+            const u = JSON.parse(sessionStorage.getItem('tm_user') || 'null');
             return u && u.id ? u.id : null;
         } catch (e) {
             return null;
@@ -42,7 +42,8 @@ class TaskModel {
     }
 
     _expireSession() {
-        localStorage.removeItem('tm_user');
+        sessionStorage.removeItem('tm_user');
+        sessionStorage.removeItem('tm_access_mode');
         if (window.app) {
             window.app.setUser(null);
             window.app.showPublic();

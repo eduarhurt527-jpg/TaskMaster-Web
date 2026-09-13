@@ -125,9 +125,10 @@ function hashSessionToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function sessionCookie(token, maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000)) {
+function sessionCookie(token, maxAgeSeconds = null) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+  const lifetime = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
 }
 
 function shortLivedCookie(name, value, maxAgeSeconds) {
@@ -551,6 +552,9 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
     if (action === 'session') {
       const user = await readSession(req);
       if (!user) return res.status(401).json({ success: false, error: 'Sesión no válida.' });
+      // Convierte también cookies antiguas persistentes en cookies de sesión del navegador.
+      const token = parseCookies(req)[SESSION_COOKIE];
+      if (token) res.setHeader('Set-Cookie', sessionCookie(token));
       return res.json({ success: true, user });
     }
 

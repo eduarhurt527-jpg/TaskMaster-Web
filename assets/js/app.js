@@ -7,8 +7,11 @@
 class App {
 
   constructor() {
+    // Elimina el perfil que versiones anteriores dejaban permanentemente en el navegador.
+    localStorage.removeItem('tm_user');
+    localStorage.removeItem('tm_access_mode');
     this.user = null;
-    this.accessMode = localStorage.getItem('tm_access_mode') === 'guest' ? 'guest' : 'public';
+    this.accessMode = sessionStorage.getItem('tm_access_mode') === 'guest' ? 'guest' : 'public';
     this.screen = 'public';
     // Instanciar Views
     this.homeView      = new HomeView(taskViewModel);
@@ -190,6 +193,8 @@ class App {
     if (publicRegister) publicRegister.addEventListener('click', () => this.authView.openMode('register'));
     const publicWorkspace = document.getElementById('btn-public-workspace');
     if (publicWorkspace) publicWorkspace.addEventListener('click', () => this.enterWorkspace());
+    const publicLogout = document.getElementById('btn-public-logout');
+    if (publicLogout) publicLogout.addEventListener('click', () => this.authView.logout());
     const btnHeroReg = document.getElementById('btn-hero-registrarse');
     if (btnHeroReg) btnHeroReg.addEventListener('click', () => this.authView.openMode('register'));
     const btnGoogle = document.getElementById('btn-google-login');
@@ -250,12 +255,12 @@ class App {
     this.user = user;
     if (user) {
       this.accessMode = 'authenticated';
-      localStorage.setItem('tm_access_mode', 'authenticated');
-    } else if (localStorage.getItem('tm_access_mode') === 'guest') {
+      sessionStorage.setItem('tm_access_mode', 'authenticated');
+    } else if (sessionStorage.getItem('tm_access_mode') === 'guest') {
       this.accessMode = 'guest';
     } else {
       this.accessMode = 'public';
-      localStorage.removeItem('tm_access_mode');
+      sessionStorage.removeItem('tm_access_mode');
     }
     this._applyAccessState();
     const el = document.getElementById('header-welcome');
@@ -283,7 +288,8 @@ class App {
   async enterGuest() {
     this.user = null;
     this.accessMode = 'guest';
-    localStorage.setItem('tm_access_mode', 'guest');
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.setItem('tm_access_mode', 'guest');
     this.screen = 'workspace';
     this._applyAccessState();
     await taskViewModel.cargarTareas();
@@ -322,12 +328,15 @@ class App {
     const publicLogin = document.getElementById('btn-public-login');
     const publicRegister = document.getElementById('btn-public-register');
     const publicWorkspace = document.getElementById('btn-public-workspace');
-    if (publicLogin) publicLogin.hidden = this.accessMode === 'authenticated';
-    if (publicRegister) publicRegister.hidden = this.accessMode === 'authenticated';
+    const publicLogout = document.getElementById('btn-public-logout');
+    // La portada siempre permite que una persona distinta inicie o cree su cuenta.
+    if (publicLogin) publicLogin.hidden = false;
+    if (publicRegister) publicRegister.hidden = false;
     if (publicWorkspace) {
       publicWorkspace.hidden = this.accessMode === 'public';
       publicWorkspace.textContent = this.accessMode === 'guest' ? 'Volver al panel' : 'Ir a mi panel';
     }
+    if (publicLogout) publicLogout.hidden = this.accessMode !== 'authenticated';
   }
 
   _updateCountdown() {

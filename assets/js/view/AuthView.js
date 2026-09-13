@@ -110,14 +110,15 @@ class AuthView {
       const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (data.success) {
-        // Guardar usuario localmente
+        // Mantener la identidad solo durante la sesión de esta pestaña.
         const user = data.user;
-        localStorage.setItem('tm_user', JSON.stringify(user));
+        sessionStorage.setItem('tm_user', JSON.stringify(user));
         this.app.setUser(user);
         this.app.enterWorkspace();
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (this.app && this.app.homeView) this.app.homeView.render();
         this.app.showToast(this.mode === 'login' ? 'Bienvenido' : 'Cuenta creada', 'success');
+        this.$form.reset();
         this.close();
       } else {
         this.app.showToast(data.error || 'Error', 'error');
@@ -138,7 +139,7 @@ class AuthView {
       });
       const data = await res.json();
       if (res.ok && data.success && data.user) {
-        localStorage.setItem('tm_user', JSON.stringify(data.user));
+        sessionStorage.setItem('tm_user', JSON.stringify(data.user));
         this.app.setUser(data.user);
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (new URLSearchParams(window.location.search).get('login') === 'google') {
@@ -150,7 +151,7 @@ class AuthView {
     } catch (e) {
       console.warn('No se pudo restaurar la sesión', e);
     }
-    localStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_user');
     this.app.setUser(null);
     this._handleOAuthResult();
   }
@@ -183,9 +184,11 @@ class AuthView {
     } catch (e) {
       console.warn('No se pudo cerrar la sesión en el servidor', e);
     }
-    localStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_access_mode');
     this.app.setUser(null);
     this.app.showPublic();
+    this.$form.reset();
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada
     if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
     if (this.app && this.app.homeView) this.app.homeView.render();
