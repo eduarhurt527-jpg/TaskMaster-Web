@@ -20,6 +20,7 @@ class App {
     this.pomodoroView  = new PomodoroView(taskViewModel);
     this.authView      = new AuthView(this);
     this.recordingView = new RecordingView(this);
+    this.fileWorkspaceView = new FileWorkspaceView(this);
 
     this._vistaActual  = 'home';
 

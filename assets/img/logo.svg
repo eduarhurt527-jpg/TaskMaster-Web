@@ -1,4 +1,4 @@
-<svg width="64" height="64" viewBox="16 16 124 124" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TaskMaster">
+<svg width="64" height="64" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TaskMaster">
   <defs>
     <linearGradient id="tmIconDark" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#8B6CFF"/>
@@ -10,8 +10,11 @@
       <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect x="24" y="30" width="100" height="100" rx="28" fill="url(#tmIconDark)"/>
-  <rect x="24" y="30" width="100" height="100" rx="28" fill="url(#tmGlossDark)"/>
-  <path d="M48 82 L66 100 L104 56" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="120" cy="38" r="12" fill="#FBBF24" stroke="#0F172A" stroke-width="3"/>
+  <rect x="18" y="18" width="124" height="124" rx="36" fill="url(#tmIconDark)"/>
+  <rect x="18" y="18" width="124" height="124" rx="36" fill="url(#tmGlossDark)"/>
+  <rect x="45" y="39" width="70" height="84" rx="16" fill="#fff" fill-opacity=".96"/>
+  <path d="M60 65l8 8 15-17M60 91l8 8 15-17" fill="none" stroke="#5865F2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M90 66h12M90 92h12" stroke="#B8C2EC" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="121" cy="39" r="14" fill="#22C55E" stroke="#fff" stroke-width="5"/>
+  <path d="M121 32v8l5 3" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
 </svg>

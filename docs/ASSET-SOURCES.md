@@ -13,6 +13,7 @@ SVG locales, composiciones CSS y símbolos de texto accesibles.
 | `assets/img/guide-2.svg` | Paso de creación | Recurso original del proyecto | TaskMaster | Recurso original generado para TaskMaster | No aplica |
 | `assets/img/guide-3.svg` | Paso de seguimiento | Recurso original del proyecto | TaskMaster | Recurso original generado para TaskMaster | No aplica |
 | `assets/img/illustrations/empty-tasks.svg` | Estado vacío de tareas | Recurso original del proyecto | TaskMaster | Recurso original generado para TaskMaster | No aplica |
+| `assets/img/illustrations/taskmaster-hero-v2.webp` | Hero de productividad conectada | Imagen original generada para este proyecto | TaskMaster / OpenAI ImageGen | Recurso original del proyecto | No aplica |
 | Iconos Google integrados en `index.html` | Identificación de Google | Formas vectoriales locales ya incluidas en el proyecto | Google LLC | Uso nominativo de marca | https://about.google/brand-resource-center/ |
 | `assets/img/integrations/google-calendar.svg` | Google Calendar | Simple Icons | Simple Icons contributors | CC0 1.0; marca propiedad de Google | https://simpleicons.org/ |
 | `assets/img/integrations/google-drive.svg` | Google Drive | Simple Icons | Simple Icons contributors | CC0 1.0; marca propiedad de Google | https://simpleicons.org/ |

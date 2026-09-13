@@ -11,6 +11,7 @@ class RecordingView {
     this.stopButton = document.getElementById('record-stop');
     this.discardButton = document.getElementById('record-discard');
     this.download = document.getElementById('record-download');
+    this.youtube = document.getElementById('record-youtube');
     this.stream = null;
     this.recorder = null;
     this.parts = [];
@@ -131,6 +132,7 @@ class RecordingView {
       this.download.href = this.objectUrl;
       this.download.download = `taskmaster-grabacion-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
       this.download.hidden = false;
+      this.youtube.hidden = false;
       this.status.textContent = 'Grabación lista. Puedes revisarla o descargarla; no se ha subido al servidor.';
     }
   }
@@ -167,6 +169,7 @@ class RecordingView {
     this.objectUrl = null;
     this.download?.removeAttribute('href');
     if (this.download) this.download.hidden = true;
+    if (this.youtube) this.youtube.hidden = true;
   }
 
   _renderTime() {

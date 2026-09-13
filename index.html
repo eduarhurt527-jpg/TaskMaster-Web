@@ -90,6 +90,7 @@
       <button class="sidebar-link nav-btn" data-view="home" data-scroll="task-list" title="Mis tareas"><span>✓</span><b>Mis tareas</b></button>
       <button class="sidebar-link nav-btn" data-view="overview" title="Calendario"><span>□</span><b>Calendario</b></button>
       <button class="sidebar-link nav-btn" data-view="integrations" title="Integraciones"><span>⌘</span><b>Integraciones</b></button>
+      <button class="sidebar-link nav-btn" data-view="files" title="Archivos"><span>⇧</span><b>Archivos</b></button>
       <button class="sidebar-link nav-btn" data-view="recordings" title="Grabaciones"><span>●</span><b>Grabaciones</b></button>
       <button class="sidebar-link nav-btn" data-view="settings" title="Configuración"><span>⚙</span><b>Configuración</b></button>
     </nav>
@@ -160,6 +161,7 @@
             </div>
           </div>
           <div class="hero__mockup">
+            <img class="hero-art" src="assets/img/illustrations/taskmaster-hero-v2.webp" alt="Ilustración de tareas, calendario, documentos y tiempo conectados" width="1280" height="853" />
             <div class="mockup-frame">
               <div class="mockup-frame__bar">
                 <span></span><span></span><span></span>
@@ -404,9 +406,23 @@
             <button class="btn btn--danger" id="record-stop" disabled>Detener</button>
             <button class="btn btn--ghost" id="record-discard" disabled>Descartar</button>
             <a class="btn btn--secondary" id="record-download" hidden>Descargar WebM</a>
+            <a class="btn btn--youtube" id="record-youtube" href="https://www.youtube.com/upload" target="_blank" rel="noopener" hidden>Continuar en YouTube</a>
           </div>
           <p class="recorder-status" id="recorder-status" role="status" aria-live="polite">La cámara, pantalla y el micrófono nunca se activan automáticamente.</p>
         </div>
+      </div>
+    </section>
+
+    <section id="view-files" class="view workspace-page">
+      <div class="workspace-page__heading workspace-page__heading--files"><div><p class="section-label">DOCUMENTOS</p><h2>Archivos de trabajo</h2><p>Selecciona documentos de tu dispositivo y continúa su edición en las herramientas que utilizas. Los archivos no se suben automáticamente.</p></div></div>
+      <div class="file-workspace">
+        <label class="file-dropzone" for="workspace-files"><span class="file-dropzone__icon">⇧</span><strong>Seleccionar documentos o archivos</strong><small>PDF, documentos, hojas, imágenes y videos. Permanecen localmente hasta que elijas un servicio.</small><input id="workspace-files" type="file" multiple></label>
+        <div class="file-actions">
+          <a href="https://docs.google.com/document/u/0/" target="_blank" rel="noopener"><img src="assets/img/integrations/google-drive.svg" alt="" width="34" height="34"><span><strong>Abrir Google Docs</strong><small>Crear o editar en Google</small></span>↗</a>
+          <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener"><img src="assets/img/integrations/google-drive.svg" alt="" width="34" height="34"><span><strong>Abrir Google Drive</strong><small>Subir manualmente a Drive</small></span>↗</a>
+          <a href="https://onedrive.live.com/" target="_blank" rel="noopener"><img src="assets/img/integrations/onedrive.svg" alt="" width="34" height="34"><span><strong>Abrir OneDrive</strong><small>Subir manualmente a Microsoft</small></span>↗</a>
+        </div>
+        <div class="selected-files"><div class="section-header"><div><p class="section-label">SELECCIÓN LOCAL</p><h3>Archivos preparados</h3></div><button class="btn btn--ghost" id="clear-workspace-files" disabled>Limpiar</button></div><ul id="workspace-file-list"><li class="file-empty">Todavía no has seleccionado archivos.</li></ul></div>
       </div>
     </section>
 
@@ -635,6 +651,7 @@
   <script src="assets/js/view/PomodoroView.js"></script>
   <script src="assets/js/view/AuthView.js?v=20260913-2"></script>
   <script src="assets/js/view/RecordingView.js?v=20260913-3"></script>
-  <script src="assets/js/app.js?v=20260913-3"></script>
+  <script src="assets/js/view/FileWorkspaceView.js?v=20260913-4"></script>
+  <script src="assets/js/app.js?v=20260913-4"></script>
 </body>
 </html>
