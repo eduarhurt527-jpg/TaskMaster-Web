@@ -8,6 +8,10 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import { google } from 'googleapis';
 
 dotenv.config();
 
@@ -17,9 +21,56 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(json());
-app.use(express.static(path.join(__dirname, '/')));
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.length === 0) return callback(null, false);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origen no permitido por CORS'));
+  },
+  credentials: true,
+}));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(json({ limit: '100kb' }));
+// Publicar únicamente los recursos del frontend. Nunca exponer .env,
+// serviceAccountKey.json, logs, código del servidor ni archivos internos.
+app.use('/assets', express.static(path.join(__dirname, 'assets'), {
+  dotfiles: 'deny',
+  index: false,
+  fallthrough: false,
+}));
+
+function requestOriginAllowed(req) {
+  const origin = req.get('origin');
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  const hostOrigin = `${req.protocol}://${req.get('host')}`;
+  return origin === hostOrigin;
+}
+
+function requireTrustedOrigin(req, res, next) {
+  if (!requestOriginAllowed(req)) {
+    return res.status(403).json({ success: false, error: 'Origen de solicitud no permitido.' });
+  }
+  next();
+}
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => ['session', 'logout'].includes(req.query.action || req.body?.action),
+  message: { success: false, error: 'Demasiados intentos. Intenta nuevamente en 15 minutos.' },
+});
 
 const serviceAccountPath = path.resolve(
   __dirname,
@@ -50,6 +101,253 @@ try {
 }
 
 const db = getFirestore(firebaseApp);
+
+// ── Sesiones seguras ────────────────────────────────────────────────────────
+
+const SESSION_COOKIE = 'tm_session';
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const GOOGLE_STATE_COOKIE = 'tm_google_state';
+const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
+
+function parseCookies(req) {
+  const result = {};
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key) result[key] = decodeURIComponent(value);
+  }
+  return result;
+}
+
+function hashSessionToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function sessionCookie(token, maxAgeSeconds = null) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const lifetime = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
+}
+
+function shortLivedCookie(name, value, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${name}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function googleOAuthClient() {
+  const clientId = process.env.GOOGLE_LOGIN_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_LOGIN_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_LOGIN_REDIRECT_URI;
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Google Login no está configurado.');
+  }
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+function integrationKey() {
+  const value = process.env.INTEGRATION_TOKEN_KEY || '';
+  const key = Buffer.from(value, 'base64');
+  if (key.length !== 32) throw new Error('INTEGRATION_TOKEN_KEY debe ser una clave base64 de 32 bytes.');
+  return key;
+}
+
+function encryptTokens(value) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', integrationKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
+  return { data: encrypted.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+}
+
+function decryptTokens(value) {
+  const decipher = createDecipheriv('aes-256-gcm', integrationKey(), Buffer.from(value.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(value.tag, 'base64'));
+  return JSON.parse(Buffer.concat([decipher.update(Buffer.from(value.data, 'base64')), decipher.final()]).toString('utf8'));
+}
+
+const integrationRef = (userId, provider) => db.collection('_integrations').doc(`${userId}_${provider}`);
+async function saveIntegration(userId, provider, tokens) {
+  await integrationRef(userId, provider).set({ provider, user_id: Number(userId), tokens: encryptTokens({ ...tokens, acquired_at: Date.now() }), updated_at: new Date().toISOString() }, { merge: true });
+}
+async function readIntegration(userId, provider) {
+  const snap = await integrationRef(userId, provider).get();
+  return snap.exists ? decryptTokens(snap.data().tokens) : null;
+}
+
+function googleIntegrationClient(tokens = null) {
+  const client = new google.auth.OAuth2(process.env.GOOGLE_LOGIN_CLIENT_ID, process.env.GOOGLE_LOGIN_CLIENT_SECRET, process.env.GOOGLE_INTEGRATION_REDIRECT_URI);
+  if (tokens) client.setCredentials(tokens);
+  return client;
+}
+
+async function createSession(res, user, additionalCookies = []) {
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = hashSessionToken(token);
+  await db.collection('_sessions').doc(tokenHash).set({
+    user_id: Number(user.id),
+    created_at: new Date().toISOString(),
+    expires_at: Date.now() + SESSION_TTL_MS,
+  });
+  res.setHeader('Set-Cookie', [...additionalCookies, sessionCookie(token)]);
+}
+
+async function revokeSession(req) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (token) await db.collection('_sessions').doc(hashSessionToken(token)).delete();
+}
+
+async function readSession(req) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (!token) return null;
+
+  const ref = db.collection('_sessions').doc(hashSessionToken(token));
+  const sessionDoc = await ref.get();
+  if (!sessionDoc.exists) return null;
+
+  const session = sessionDoc.data();
+  if (!session.expires_at || session.expires_at <= Date.now()) {
+    await ref.delete();
+    return null;
+  }
+
+  const userDoc = await db.collection('usuarios').doc(String(session.user_id)).get();
+  if (!userDoc.exists) {
+    await ref.delete();
+    return null;
+  }
+
+  const user = userDoc.data();
+  return { id: user.id, nombre: user.nombre, email: user.email };
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    const user = await readSession(req);
+    if (!user) return res.status(401).json({ success: false, error: 'Debes iniciar sesión.' });
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('SESSION ERROR:', error.message);
+    res.status(500).json({ success: false, error: 'No se pudo validar la sesión.' });
+  }
+}
+
+async function cleanupExpiredSessions() {
+  const expired = await db.collection('_sessions').where('expires_at', '<=', Date.now()).limit(200).get();
+  if (expired.empty) return;
+  const batch = db.batch();
+  expired.docs.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+cleanupExpiredSessions().catch(error => console.error('SESSION CLEANUP ERROR:', error.message));
+const sessionCleanupTimer = setInterval(
+  () => cleanupExpiredSessions().catch(error => console.error('SESSION CLEANUP ERROR:', error.message)),
+  60 * 60 * 1000
+);
+sessionCleanupTimer.unref();
+
+// ── Google Login OAuth 2.0 / OpenID Connect ────────────────────────────────
+
+app.get('/api/auth/google/start', authLimiter, async (req, res) => {
+  try {
+    const state = randomBytes(32).toString('base64url');
+    const stateHash = hashSessionToken(state);
+    await db.collection('_google_login_states').doc(stateHash).set({
+      expires_at: Date.now() + GOOGLE_STATE_TTL_MS,
+      created_at: new Date().toISOString(),
+    });
+    res.setHeader('Set-Cookie', shortLivedCookie(
+      GOOGLE_STATE_COOKIE,
+      state,
+      Math.floor(GOOGLE_STATE_TTL_MS / 1000)
+    ));
+    const url = googleOAuthClient().generateAuthUrl({
+      access_type: 'online',
+      prompt: 'select_account',
+      scope: ['openid', 'email', 'profile'],
+      state,
+    });
+    res.redirect(url);
+  } catch (error) {
+    console.error('GOOGLE LOGIN START ERROR:', error.message);
+    res.redirect('/?auth_error=google_config');
+  }
+});
+
+app.get('/api/auth/google/callback', authLimiter, async (req, res) => {
+  const clearStateCookie = shortLivedCookie(GOOGLE_STATE_COOKIE, '', 0);
+  try {
+    if (req.query.error || !req.query.code || !req.query.state) {
+      throw new Error('Autorización cancelada o incompleta.');
+    }
+
+    const cookieState = parseCookies(req)[GOOGLE_STATE_COOKIE];
+    if (!cookieState || cookieState !== req.query.state) {
+      throw new Error('Estado OAuth inválido.');
+    }
+
+    const stateRef = db.collection('_google_login_states').doc(hashSessionToken(req.query.state));
+    const stateDoc = await stateRef.get();
+    if (!stateDoc.exists) throw new Error('Estado OAuth inexistente.');
+    await stateRef.delete();
+    if (stateDoc.data().expires_at <= Date.now()) throw new Error('Estado OAuth expirado.');
+
+    const client = googleOAuthClient();
+    const { tokens } = await client.getToken(req.query.code);
+    if (!tokens.id_token) throw new Error('Google no devolvió un ID token.');
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_LOGIN_CLIENT_ID,
+    });
+    const profile = ticket.getPayload();
+    if (!profile?.sub || !profile.email || !profile.email_verified) {
+      throw new Error('La cuenta de Google no tiene un correo verificado.');
+    }
+
+    const normalizedEmail = profile.email.trim().toLowerCase();
+    const existing = await db.collection('usuarios')
+      .where('email', '==', normalizedEmail)
+      .limit(1)
+      .get();
+
+    let user;
+    if (existing.empty) {
+      const id = await nextId('usuarios');
+      user = {
+        id,
+        nombre: String(profile.name || normalizedEmail.split('@')[0]).slice(0, 100),
+        email: normalizedEmail,
+        password_hash: null,
+        auth_provider: 'google',
+        google_sub: profile.sub,
+        fecha_creacion: new Date().toISOString(),
+      };
+      await db.collection('usuarios').doc(String(id)).set(user);
+    } else {
+      const ref = existing.docs[0].ref;
+      const current = existing.docs[0].data();
+      if (current.google_sub && current.google_sub !== profile.sub) {
+        throw new Error('La cuenta Google no coincide con la cuenta vinculada.');
+      }
+      await ref.set({
+        google_sub: profile.sub,
+        auth_provider: current.password_hash ? 'local+google' : 'google',
+      }, { merge: true });
+      user = { ...current, google_sub: profile.sub };
+    }
+
+    const publicUser = { id: user.id, nombre: user.nombre, email: user.email };
+    await createSession(res, publicUser, [clearStateCookie]);
+    res.redirect('/?login=google');
+  } catch (error) {
+    console.error('GOOGLE LOGIN CALLBACK ERROR:', error.message);
+    res.setHeader('Set-Cookie', clearStateCookie);
+    res.redirect('/?auth_error=google');
+  }
+});
 
 // Verificar conexión a Firebase al arrancar
 db.collection('_healthcheck').limit(1).get()
@@ -130,6 +428,9 @@ app.get('/api/categorias', async (req, res) => {
 
 // ── Tareas ───────────────────────────────────────────────────────────────
 
+// Todas las operaciones persistentes requieren una sesión válida.
+app.use('/api/tareas', requireTrustedOrigin, requireAuth);
+
 app.get('/api/tareas', async (req, res) => {
   try {
     const [tareasSnap, materiasSnap] = await Promise.all([
@@ -143,9 +444,7 @@ app.get('/api/tareas', async (req, res) => {
       materiasMap[m.id] = m;
     });
 
-    // Filtrar por usuario cuando el cliente lo indica; las tareas antiguas
-    // (usuario_id null, creadas antes del soporte multiusuario) siguen visibles
-    const usuarioId = req.query.usuario_id ? Number(req.query.usuario_id) : null;
+    const usuarioId = Number(req.user.id);
 
     const tareas = tareasSnap.docs
       .map(d => {
@@ -157,7 +456,7 @@ app.get('/api/tareas', async (req, res) => {
           materia_color: m ? m.color : null,
         };
       })
-      .filter(t => usuarioId === null || t.usuario_id == null || t.usuario_id === usuarioId)
+      .filter(t => Number(t.usuario_id) === usuarioId)
       .sort((a, b) => {
         if (a.completada !== b.completada) return a.completada - b.completada;
         return new Date(a.fecha_limite) - new Date(b.fecha_limite);
@@ -201,7 +500,7 @@ app.post('/api/tareas', async (req, res) => {
       min_anticipacion: Number(min_anticipacion),
       aviso_enviado: 0,
       nota: null,
-      usuario_id: usuario_id != null ? Number(usuario_id) : null,
+      usuario_id: Number(req.user.id),
       fecha_creacion: new Date().toISOString(),
     };
 
@@ -234,6 +533,10 @@ app.put('/api/tareas', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
     }
 
+    if (Number(doc.data().usuario_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, error: 'No puedes modificar una tarea de otro usuario.' });
+    }
+
     await ref.update(updates);
     res.json({ success: true });
   } catch (error) {
@@ -246,7 +549,16 @@ app.delete('/api/tareas', async (req, res) => {
     const id = Number(req.body.id || 0);
     if (!id) return res.status(400).json({ success: false, error: 'ID requerido.' });
 
-    await db.collection('tareas').doc(String(id)).delete();
+    const tareaRef = db.collection('tareas').doc(String(id));
+    const tareaDoc = await tareaRef.get();
+    if (!tareaDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Tarea no encontrada.' });
+    }
+    if (Number(tareaDoc.data().usuario_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, error: 'No puedes eliminar una tarea de otro usuario.' });
+    }
+
+    await tareaRef.delete();
 
     const alertasSnap = await db.collection('alertas').where('tarea_id', '==', id).get();
     if (!alertasSnap.empty) {
@@ -263,13 +575,28 @@ app.delete('/api/tareas', async (req, res) => {
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 
-app.post('/api/auth', async (req, res) => {
+app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
   try {
     const action = req.query.action || req.body.action;
     const { nombre = '', email = '', password = '' } = req.body;
 
-    if (!['login', 'register', 'google'].includes(action)) {
+    if (!['login', 'register', 'google', 'session', 'logout'].includes(action)) {
       return res.status(405).json({ success: false, error: 'Acción no soportada.' });
+    }
+
+    if (action === 'session') {
+      const user = await readSession(req);
+      if (!user) return res.status(401).json({ success: false, error: 'Sesión no válida.' });
+      // Convierte también cookies antiguas persistentes en cookies de sesión del navegador.
+      const token = parseCookies(req)[SESSION_COOKIE];
+      if (token) res.setHeader('Set-Cookie', sessionCookie(token));
+      return res.json({ success: true, user });
+    }
+
+    if (action === 'logout') {
+      await revokeSession(req);
+      res.setHeader('Set-Cookie', sessionCookie('', 0));
+      return res.json({ success: true });
     }
 
     if (action === 'register') {
@@ -277,7 +604,18 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const existing = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, error: 'Introduce un correo válido.' });
+      }
+      if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+        return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres y un máximo de 72 bytes.' });
+      }
+      if (nombre.trim().length > 100 || normalizedEmail.length > 254) {
+        return res.status(400).json({ success: false, error: 'Nombre o correo demasiado largo.' });
+      }
+
+      const existing = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (!existing.empty) {
         return res.status(409).json({ success: false, error: 'Este correo ya está registrado.' });
       }
@@ -287,12 +625,14 @@ app.post('/api/auth', async (req, res) => {
       const usuario = {
         id,
         nombre: nombre.trim(),
-        email: email.trim(),
+        email: normalizedEmail,
         password_hash: hash,
         fecha_creacion: new Date().toISOString(),
       };
       await db.collection('usuarios').doc(String(id)).set(usuario);
-      return res.json({ success: true, user_id: id });
+      const publicUser = { id, nombre: usuario.nombre, email: usuario.email };
+      await createSession(res, publicUser);
+      return res.status(201).json({ success: true, user_id: id, user: publicUser });
     }
 
     if (action === 'login') {
@@ -300,50 +640,164 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Campos incompletos' });
       }
 
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.length > 254 || Buffer.byteLength(password, 'utf8') > 72) {
+        return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
+      }
+      const snap = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (snap.empty) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
       const user = snap.docs[0].data();
-      const match = await bcrypt.compare(password, user.password_hash);
+      const match = typeof user.password_hash === 'string'
+        ? await bcrypt.compare(password, user.password_hash)
+        : false;
       if (!match) return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
 
-      return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
+      const publicUser = { id: user.id, nombre: user.nombre, email: user.email };
+      await createSession(res, publicUser);
+      return res.json({ success: true, user: publicUser });
     }
 
     if (action === 'google') {
-      if (!email.trim()) {
-        return res.status(400).json({ success: false, error: 'Campos incompletos' });
-      }
+      return res.status(501).json({
+        success: false,
+        error: 'El acceso con Google está deshabilitado hasta configurar OAuth real.'
+      });
 
-      const snap = await db.collection('usuarios').where('email', '==', email.trim()).limit(1).get();
-      if (!snap.empty) {
-        const user = snap.docs[0].data();
-        return res.json({ success: true, user: { id: user.id, nombre: user.nombre, email: user.email } });
-      }
-
-      const id = await nextId('usuarios');
-      const usuario = {
-        id,
-        nombre: nombre.trim() || email.trim().split('@')[0],
-        email: email.trim(),
-        password_hash: null,
-        fecha_creacion: new Date().toISOString(),
-      };
-      await db.collection('usuarios').doc(String(id)).set(usuario);
-      return res.json({ success: true, user: { id: usuario.id, nombre: usuario.nombre, email: usuario.email } });
     }
   } catch (error) {
     console.error('AUTH ERROR:', error.message, error.stack);
-    res.status(500).json({
-      success: false,
-      error: 'Error en auth: ' + error.message
-    });
+    res.status(500).json({ success: false, error: 'No se pudo completar la autenticación.' });
   }
+});
+
+// ── Integraciones OAuth y archivos ──────────────────────────────────────
+app.get('/api/integrations/status', requireAuth, async (req, res) => {
+  const [googleDoc, microsoftDoc] = await Promise.all([integrationRef(req.user.id, 'google').get(), integrationRef(req.user.id, 'microsoft').get()]);
+  res.json({ success: true, google: googleDoc.exists, microsoft: microsoftDoc.exists });
+});
+
+app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
+  try {
+    if (!process.env.GOOGLE_INTEGRATION_REDIRECT_URI) throw new Error('Falta GOOGLE_INTEGRATION_REDIRECT_URI.');
+    const state = randomBytes(32).toString('base64url');
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'google', expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
+    const url = googleIntegrationClient().generateAuthUrl({ access_type: 'offline', prompt: 'consent select_account', include_granted_scopes: true, state, scope: [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/youtube.upload'
+    ] });
+    res.redirect(url);
+  } catch (error) { res.redirect('/?integration_error=google_config'); }
+});
+
+app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
+  try {
+    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().provider !== 'google' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
+    await ref.delete();
+    const { tokens } = await googleIntegrationClient().getToken(req.query.code);
+    await saveIntegration(req.user.id, 'google', tokens);
+    res.redirect('/?integration=google');
+  } catch (error) { console.error('GOOGLE INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=google'); }
+});
+
+app.get('/api/integrations/microsoft/start', requireAuth, async (req, res) => {
+  try {
+    const clientId = process.env.MICROSOFT_CLIENT_ID;
+    const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
+    if (!clientId || !redirectUri) throw new Error('Microsoft OAuth no configurado.');
+    const state = randomBytes(32).toString('base64url');
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
+    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope: 'offline_access User.Read Files.ReadWrite', state });
+    res.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
+  } catch (error) { res.redirect('/?integration_error=microsoft_config'); }
+});
+
+app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) => {
+  try {
+    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().provider !== 'microsoft' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
+    await ref.delete();
+    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: 'offline_access User.Read Files.ReadWrite' });
+    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const tokens = await response.json();
+    if (!response.ok) throw new Error(tokens.error_description || 'Microsoft rechazó el token.');
+    await saveIntegration(req.user.id, 'microsoft', tokens);
+    res.redirect('/?integration=microsoft');
+  } catch (error) { console.error('MICROSOFT INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=microsoft'); }
+});
+
+app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, async (req, res) => {
+  if (!['google', 'microsoft'].includes(req.params.provider)) return res.status(400).json({ success: false, error: 'Proveedor inválido.' });
+  await integrationRef(req.user.id, req.params.provider).delete();
+  res.json({ success: true });
+});
+
+app.post('/api/integrations/google/docs', requireTrustedOrigin, requireAuth, async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const docs = google.docs({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const result = await docs.documents.create({ requestBody: { title: String(req.body.title || 'Documento TaskMaster').slice(0, 120) } });
+    res.json({ success: true, documentId: result.data.documentId, url: `https://docs.google.com/document/d/${result.data.documentId}/edit` });
+  } catch (error) { console.error('DOCS CREATE ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo crear el documento.' }); }
+});
+
+app.post('/api/integrations/google/drive/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const name = decodeURIComponent(req.get('X-File-Name') || 'archivo-taskmaster');
+    const { Readable } = await import('stream');
+    const drive = google.drive({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const result = await drive.files.create({ requestBody: { name: name.slice(0, 240) }, media: { mimeType: req.get('X-File-Type') || 'application/octet-stream', body: Readable.from(req.body) }, fields: 'id,name,webViewLink' });
+    res.json({ success: true, file: result.data });
+  } catch (error) { console.error('DRIVE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir a Drive.' }); }
+});
+
+app.post('/api/integrations/google/youtube/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'video/webm', limit: '100mb' }), async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const { Readable } = await import('stream');
+    const youtube = google.youtube({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const result = await youtube.videos.insert({ part: ['snippet','status'], requestBody: { snippet: { title: String(req.get('X-Video-Title') || 'Grabación TaskMaster').slice(0, 100) }, status: { privacyStatus: 'private' } }, media: { body: Readable.from(req.body) } });
+    res.json({ success: true, videoId: result.data.id, url: `https://youtu.be/${result.data.id}` });
+  } catch (error) { console.error('YOUTUBE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir el video.' }); }
+});
+
+async function microsoftAccessToken(userId) {
+  let tokens = await readIntegration(userId, 'microsoft');
+  if (!tokens) return null;
+  if (tokens.access_token && Date.now() < Number(tokens.acquired_at || 0) + (Number(tokens.expires_in || 3600) - 120) * 1000) return tokens.access_token;
+  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: 'offline_access User.Read Files.ReadWrite' });
+  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  const refreshed = await response.json();
+  if (!response.ok) throw new Error('No se pudo renovar Microsoft OAuth.');
+  tokens = { ...tokens, ...refreshed };
+  await saveIntegration(userId, 'microsoft', tokens);
+  return tokens.access_token;
+}
+
+app.post('/api/integrations/microsoft/onedrive/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
+  try {
+    const accessToken = await microsoftAccessToken(req.user.id);
+    if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
+    const safeName = decodeURIComponent(req.get('X-File-Name') || 'archivo-taskmaster').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
+    const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/TaskMaster/${encodeURIComponent(safeName)}:/content`, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': req.get('X-File-Type') || 'application/octet-stream' }, body: req.body });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Microsoft Graph rechazó el archivo.');
+    res.json({ success: true, file: { id: data.id, name: data.name, webUrl: data.webUrl } });
+  } catch (error) { console.error('ONEDRIVE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir a OneDrive.' }); }
 });
 
 // ── Notificaciones ───────────────────────────────────────────────────────
 
-app.post('/api/notify', async (req, res) => {
+app.post('/api/notify', requireTrustedOrigin, requireAuth, async (req, res) => {
   try {
     const { email = '', asunto = 'Notificación TaskMaster', mensaje = '' } = req.body;
     if (!email) {

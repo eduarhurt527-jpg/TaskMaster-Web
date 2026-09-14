@@ -20,7 +20,17 @@ router.post('/api/google/drive/vincular', async (req, res) => {
     const fileId = extraerFileId(url);
     if (!fileId) return res.status(400).json({ success: false, error: 'No se reconoce ese link de Google Drive.' });
 
-    const accessToken = await obtenerAccessToken();
+    const base = process.env.MAIN_API_URL || 'http://localhost:3000';
+    const taskResponse = await fetch(`${base}/api/tareas`, {
+      headers: { Cookie: req.headers.cookie || '' },
+    });
+    const taskData = await taskResponse.json();
+    const ownsTask = (taskData.tareas || []).some(t => Number(t.id) === Number(tarea_id));
+    if (!taskResponse.ok || !ownsTask) {
+      return res.status(404).json({ success: false, error: 'Tarea no encontrada para este usuario.' });
+    }
+
+    const accessToken = await obtenerAccessToken(req.user.id);
     const gres = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,webViewLink,iconLink`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -30,6 +40,7 @@ router.post('/api/google/drive/vincular', async (req, res) => {
 
     const adjunto = {
       tarea_id: Number(tarea_id),
+      usuario_id: Number(req.user.id),
       proveedor: 'drive',
       nombre: gdata.name,
       url: gdata.webViewLink,
@@ -48,7 +59,7 @@ router.post('/api/google/drive/vincular', async (req, res) => {
 router.get('/api/adjuntos', async (req, res) => {
   try {
     const { tarea_id } = req.query;
-    let q = db.collection('int_adjuntos');
+    let q = db.collection('int_adjuntos').where('usuario_id', '==', Number(req.user.id));
     if (tarea_id) q = q.where('tarea_id', '==', Number(tarea_id));
     const snap = await q.get();
     const adjuntos = snap.docs.map(d => ({ id: d.id, ...d.data() }));

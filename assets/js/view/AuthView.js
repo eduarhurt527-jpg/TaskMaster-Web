@@ -53,7 +53,7 @@ class AuthView {
     this.open();
   }
 
-  /** Simula login con proveedor (Google). En producción usar OAuth real. */
+  /** Inicia el flujo OAuth real de Google en el backend. */
   openGoogleMode() {
     this.mode = 'google';
     this.$modeLabel.textContent = 'Google';
@@ -70,42 +70,14 @@ class AuthView {
 
   async loginWithProvider(provider) {
     if (provider === 'google') {
-      this.openGoogleMode();
+      window.location.assign('/api/auth/google/start');
     } else {
       this.openMode('login');
     }
   }
 
   async _submitGoogle() {
-    const email = this.$email.value.trim();
-    if (!email) {
-      this.app.showToast('Introduce tu correo', 'error');
-      return;
-    }
-    const nombre = email.split('@')[0];
-    try {
-      const res = await fetch('api/auth?action=google', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, nombre })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const user = { id: data.user.id, nombre: data.user.nombre, email };
-        localStorage.setItem('tm_user', JSON.stringify(user));
-        this.app.setUser(user);
-        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
-        if (this.app && this.app.homeView) this.app.homeView.render();
-        this.app.showToast('Conectado con Google', 'success');
-        this.close();
-        return;
-      }
-      this.app.showToast(data.error || 'Error Google', 'error');
-    } catch (e) {
-      console.error(e);
-      this.app.showToast('Error de red Google', 'error');
-    }
+    window.location.assign('/api/auth/google/start');
   }
 
   close() {
@@ -138,13 +110,16 @@ class AuthView {
       const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (data.success) {
-        // Guardar usuario localmente
-        const user = { id: data.user_id || (data.user && data.user.id) || null, nombre: nombre || (data.user && data.user.nombre) || email, email };
-        localStorage.setItem('tm_user', JSON.stringify(user));
+        // Mantener la identidad solo durante la sesión de esta pestaña.
+        const user = data.user;
+        sessionStorage.setItem('tm_user', JSON.stringify(user));
         this.app.setUser(user);
+        this.app.enterWorkspace();
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (this.app && this.app.homeView) this.app.homeView.render();
+        this.app.integrationView?.refresh();
         this.app.showToast(this.mode === 'login' ? 'Bienvenido' : 'Cuenta creada', 'success');
+        this.$form.reset();
         this.close();
       } else {
         this.app.showToast(data.error || 'Error', 'error');
@@ -155,16 +130,97 @@ class AuthView {
     }
   }
 
-  _restoreUser() {
-    const u = localStorage.getItem('tm_user');
-    if (u) {
-      try { const user = JSON.parse(u); this.app.setUser(user); } catch(e){}
+  async _restoreUser() {
+    const params = new URLSearchParams(window.location.search);
+    const shouldRestore = params.get('workspace') === '1' || params.get('login') === 'google';
+
+    // `/` representa la portada pública. No reutilizar allí la cuenta de una visita
+    // anterior, especialmente en equipos compartidos.
+    if (!shouldRestore) {
+      try {
+        await fetch('api/auth?action=logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+      } catch (e) {
+        console.warn('No se pudo limpiar la sesión anterior del servidor', e);
+      }
+      sessionStorage.removeItem('tm_user');
+      sessionStorage.removeItem('tm_access_mode');
+      this.app.setUser(null);
+      this._handleOAuthResult();
+      return;
     }
+
+    try {
+      const res = await fetch('api/auth?action=session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        sessionStorage.setItem('tm_user', JSON.stringify(data.user));
+        this.app.setUser(data.user);
+        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
+        if (new URLSearchParams(window.location.search).get('login') === 'google') {
+          this.app.enterWorkspace();
+        }
+        this._handleOAuthResult();
+        return;
+      }
+    } catch (e) {
+      console.warn('No se pudo restaurar la sesión', e);
+    }
+    sessionStorage.removeItem('tm_user');
+    this.app.setUser(null);
+    if (this.app.accessMode === 'guest' && params.get('workspace') === '1') {
+      this.app.enterWorkspace();
+    } else {
+      params.delete('workspace');
+      const query = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
+    this._handleOAuthResult();
+  }
+
+  _handleOAuthResult() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('login') === 'google') {
+      this.app.showToast('Sesión iniciada con Google', 'success');
+    } else if (params.get('auth_error') === 'google_config') {
+      this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
+    } else if (params.get('auth_error') === 'google') {
+      this.app.showToast('Google no pudo verificar el inicio de sesión', 'error');
+    } else {
+      return;
+    }
+    params.delete('login');
+    params.delete('auth_error');
+    if (this.app.accessMode === 'authenticated') params.set('workspace', '1');
+    const query = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
   }
 
   async logout() {
-    localStorage.removeItem('tm_user');
+    try {
+      await fetch('api/auth?action=logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+    } catch (e) {
+      console.warn('No se pudo cerrar la sesión en el servidor', e);
+    }
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_access_mode');
     this.app.setUser(null);
+    this.app.showPublic();
+    this.$form.reset();
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada
     if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
     if (this.app && this.app.homeView) this.app.homeView.render();

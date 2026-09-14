@@ -12,7 +12,9 @@ router.post('/email/recordatorio', async (req, res) => {
     }
 
     const base = process.env.MAIN_API_URL || 'http://localhost:3000';
-    const r = await fetch(`${base}/api/tareas`);
+    const r = await fetch(`${base}/api/tareas`, {
+      headers: { Cookie: req.headers.cookie || '' },
+    });
     const data = await r.json();
     const tarea = (data.tareas || []).find(t => Number(t.id) === Number(tarea_id));
     if (!tarea) {
@@ -26,6 +28,7 @@ router.post('/email/recordatorio', async (req, res) => {
 
     await db.collection('int_notificaciones_log').add({
       tarea_id: Number(tarea_id),
+      usuario_id: Number(req.user.id),
       email,
       asunto,
       estado: resultado.success ? 'enviado' : 'error',

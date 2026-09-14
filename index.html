@@ -4,12 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TaskMaster - Avance 100% Completo</title>
-  <link rel="stylesheet" href="assets/css/main.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/main.css?v=20260913-4" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
 </head>
-<body>
+<body data-access="public" data-screen="public">
 
-  <header class="app-header">
+  <header class="public-header" data-public-only>
+    <a class="public-brand" href="#inicio" aria-label="TaskMaster, volver al inicio">
+      <img src="assets/img/logo.svg" alt="" />
+      <span>TaskMaster</span>
+    </a>
+    <nav class="public-nav" aria-label="Navegación principal">
+      <a href="#caracteristicas">Características</a>
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#integraciones">Integraciones</a>
+      <a href="#nosotros">Nosotros</a>
+      <a href="#contacto">Contacto</a>
+    </nav>
+    <div class="public-actions">
+      <button class="btn btn--ghost" id="btn-public-login">Iniciar sesión</button>
+      <button class="btn btn--primary" id="btn-public-register">Crear cuenta</button>
+    </div>
+  </header>
+
+  <header class="app-header" data-workspace-only>
     <div class="header-inner">
       <div class="brand">
         <img src="assets/img/logo.svg" alt="TaskMaster" class="brand-logo" />
@@ -19,6 +39,8 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="btn btn--ghost" data-action="public">Página de inicio</button>
+        <span class="access-badge" id="access-badge">Modo invitado</span>
         <div>
           <div class="welcome" id="header-welcome">Bienvenido</div>
           <div class="header-countdown" id="header-countdown"></div>
@@ -60,19 +82,38 @@
     </div>
   </header>
 
+  <aside class="workspace-sidebar" id="workspace-sidebar" data-workspace-only aria-label="Navegación del espacio de trabajo">
+    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="true" aria-label="Contraer menú">☰</button>
+    <nav class="workspace-sidebar__nav">
+      <button class="sidebar-link nav-btn active" data-view="home" title="Inicio"><span>⌂</span><b>Inicio</b></button>
+      <button class="sidebar-link nav-btn" data-view="overview" title="Mi panel"><span>▦</span><b>Mi panel</b></button>
+      <button class="sidebar-link nav-btn" data-view="home" data-scroll="task-list" title="Mis tareas"><span>✓</span><b>Mis tareas</b></button>
+      <button class="sidebar-link nav-btn" data-view="overview" title="Calendario"><span>□</span><b>Calendario</b></button>
+      <button class="sidebar-link nav-btn" data-view="integrations" title="Integraciones"><span>⌘</span><b>Integraciones</b></button>
+      <button class="sidebar-link nav-btn" data-view="files" title="Archivos"><span>⇧</span><b>Archivos</b></button>
+      <button class="sidebar-link nav-btn" data-view="recordings" title="Grabaciones"><span>●</span><b>Grabaciones</b></button>
+      <button class="sidebar-link nav-btn" data-view="settings" title="Configuración"><span>⚙</span><b>Configuración</b></button>
+    </nav>
+    <button class="sidebar-link sidebar-link--logout" id="sidebar-logout" type="button" title="Cerrar sesión"><span>↪</span><b>Cerrar sesión</b></button>
+  </aside>
+
   <main class="app-main">
 
     <!-- Vista Inicio -->
     <section id="view-home" class="view active">
 
-      <section class="hero" id="hero-landing">
+      <section class="hero" id="inicio" data-public-only>
         <div class="hero__dots"></div>
         <div class="hero__content">
           <div class="hero__copy">
             <p class="hero__eyebrow">Gestión de tareas simple</p>
             <h1 class="hero__title">Organiza tu día con enfoque</h1>
             <p class="hero__subtitle">Prioriza lo urgente, recibe recordatorios a tiempo y sigue tu avance sin perder el ritmo.</p>
-            <button class="btn btn--primary hero__cta" id="btn-hero-registrarse">Empieza gratis</button>
+            <div class="hero__actions">
+              <button class="btn btn--primary hero__cta" id="btn-hero-registrarse">Crear cuenta gratis</button>
+              <button class="btn btn--secondary hero__cta" data-action="guest">Continuar como invitado</button>
+            </div>
+            <p class="hero__trust">Sin tarjeta · Tus tareas de invitado permanecen en este navegador</p>
             <div class="hero__features">
               <div class="hero__feature">
                 <img src="assets/img/feature-notify.svg" alt="" />
@@ -120,6 +161,7 @@
             </div>
           </div>
           <div class="hero__mockup">
+            <img class="hero-art" src="assets/img/illustrations/taskmaster-hero-v2.webp" alt="Ilustración de tareas, calendario, documentos y tiempo conectados" width="1280" height="853" />
             <div class="mockup-frame">
               <div class="mockup-frame__bar">
                 <span></span><span></span><span></span>
@@ -154,7 +196,7 @@
         </div>
       </section>
 
-      <div class="home-panel">
+      <div class="home-panel" data-workspace-only>
         <div class="section-header">
           <div>
             <p class="section-label">CATEGORÍAS</p>
@@ -173,7 +215,7 @@
         <div class="filter-row" id="filter-row"></div>
       </div>
 
-      <section class="how-to">
+      <section class="how-to" id="como-funciona" data-public-only>
         <div class="section-header">
           <div>
             <p class="section-label">PASO A PASO</p>
@@ -184,7 +226,7 @@
           <article class="how-card">
             <img src="assets/img/guide-1.svg" alt="Paso 1" />
             <h3>Paso 1: Inicia sesión</h3>
-            <p>Regístrate o entra con Google para guardar tus tareas y seguir tu progreso.</p>
+            <p>Regístrate o inicia sesión para guardar tus tareas y seguir tu progreso.</p>
           </article>
           <article class="how-card">
             <img src="assets/img/guide-2.svg" alt="Paso 2" />
@@ -199,7 +241,56 @@
         </div>
       </section>
 
-      <div class="home-summary">
+      <section class="product-story" aria-labelledby="product-story-title" data-public-only>
+        <div class="product-story__copy">
+          <p class="section-label">UNA RUTINA MÁS CLARA</p>
+          <h2 id="product-story-title">De una lista pendiente a un plan que sí puedes seguir</h2>
+          <p>Captura lo que necesitas hacer, ordénalo por prioridad y lleva cada compromiso a tu calendario. TaskMaster convierte una lista dispersa en un flujo de trabajo visible.</p>
+          <ul class="product-story__steps" aria-label="Flujo de organización">
+            <li><span>1</span><div><strong>Anota</strong><small>Reúne tus pendientes en un solo lugar.</small></div></li>
+            <li><span>2</span><div><strong>Prioriza</strong><small>Decide qué requiere tu atención primero.</small></div></li>
+            <li><span>3</span><div><strong>Avanza</strong><small>Completa tareas y revisa tu progreso.</small></div></li>
+          </ul>
+        </div>
+        <figure class="product-story__media">
+          <div class="product-story__video-frame">
+            <video controls muted playsinline preload="metadata" poster="assets/img/illustrations/taskmaster-planning-poster.webp" aria-label="Persona organizando una lista de tareas en una agenda">
+              <source src="assets/video/taskmaster-planning.mp4" type="video/mp4" />
+              Tu navegador no puede reproducir este video.
+            </video>
+          </div>
+          <figcaption>Planificación de tareas en una agenda. Video de <a href="https://www.pexels.com/video/person-writing-a-to-do-list-7597168/" target="_blank" rel="noopener noreferrer">Miriam Alonso en Pexels</a>.</figcaption>
+        </figure>
+      </section>
+
+      <section class="public-integrations" id="integraciones" data-public-only>
+        <div class="section-header">
+          <div><p class="section-label">TODO CONECTADO</p><h2>Tus herramientas, en un solo flujo</h2></div>
+          <p>Conecta tu calendario, clases, archivos y equipo cuando tengas una cuenta.</p>
+        </div>
+        <div class="integration-showcase">
+          <article><img class="service-logo" src="assets/img/integrations/google-calendar.svg" alt="" width="46" height="46"><h3>Google Calendar</h3><p>Convierte fechas límite en eventos.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/google-drive.svg" alt="" width="46" height="46"><h3>Google Drive</h3><p>Vincula archivos a cada tarea.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/google-classroom.svg" alt="" width="46" height="46"><h3>Classroom</h3><p>Importa trabajos y entregas.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/teams.svg" alt="" width="46" height="46"><h3>Microsoft Teams</h3><p>Comparte tareas con tu equipo.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/onedrive.svg" alt="" width="46" height="46"><h3>OneDrive</h3><p>Mantén documentos a mano.</p></article>
+          <article><img class="service-logo" src="assets/img/integrations/gmail.svg" alt="" width="46" height="46"><h3>Recordatorios</h3><p>Envía avisos importantes.</p></article>
+        </div>
+      </section>
+
+      <section class="workspace-integrations" data-workspace-only>
+        <div class="section-header">
+          <div><p class="section-label">INTEGRACIONES</p><h2>Amplía tu espacio de trabajo</h2></div>
+          <button class="btn btn--secondary" id="btn-manage-connections" type="button">Administrar conexiones</button>
+        </div>
+        <div class="workspace-apps">
+          <div><img class="service-logo" src="assets/img/integrations/google-calendar.svg" alt="" width="46" height="46"><strong>Google</strong><small>Calendar · Drive · Classroom</small></div>
+          <div><img class="service-logo" src="assets/img/integrations/teams.svg" alt="" width="46" height="46"><strong>Microsoft</strong><small>OneDrive · Teams</small></div>
+          <p class="guest-lock-message">Inicia sesión para conectar aplicaciones de manera segura.</p>
+        </div>
+      </section>
+
+      <div class="home-summary" data-workspace-only>
         <div class="home-summary__top">
           <div class="summary-card">
             <span class="summary-card__label">Carga semanal</span>
@@ -211,11 +302,11 @@
         </div>
         <div class="bar-chart" id="weekly-chart"></div>
       </div>
-      <div class="task-section">
+      <div class="task-section" data-workspace-only>
         <div class="task-list" id="task-list"></div>
       </div>
 
-      <section class="about-section">
+      <section class="about-section" id="nosotros" data-public-only>
         <div class="section-header">
           <div>
             <p class="section-label">ACERCA DE</p>
@@ -246,6 +337,11 @@
             <p>Ser el punto central donde tareas, recordatorios y herramientas como Google Calendar y Classroom se conectan, para que nada se pierda entre pestañas y aplicaciones.</p>
           </article>
           <article class="about-card">
+            <span class="about-card__icon">◎</span>
+            <h3>Visión</h3>
+            <p>Convertir la organización diaria en una experiencia sencilla, conectada y accesible para estudiantes y profesionales.</p>
+          </article>
+          <article class="about-card">
             <span class="about-card__icon">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="8.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.6"/>
@@ -258,6 +354,21 @@
             <p>TaskMaster es un proyecto académico creado por estudiantes enfocados en resolver un problema real: la gestión del tiempo y la productividad personal.</p>
           </article>
         </div>
+      </section>
+
+      <section class="contact-section" id="contacto" data-public-only>
+        <div>
+          <p class="section-label">CONTACTO</p>
+          <h2>¿Tienes una pregunta sobre TaskMaster?</h2>
+          <p>Cuéntanos cómo podemos ayudarte. La información de contacto puede configurarse antes de publicar el proyecto.</p>
+        </div>
+        <form class="contact-card" id="contact-form">
+          <label>Nombre<input type="text" required maxlength="100" placeholder="Tu nombre" /></label>
+          <label>Correo<input type="email" required maxlength="254" placeholder="correo@ejemplo.com" /></label>
+          <label>Mensaje<textarea required rows="4" maxlength="1000" placeholder="Escribe tu consulta"></textarea></label>
+          <button class="btn btn--primary" type="submit">Preparar mensaje</button>
+          <small>No almacenamos este mensaje hasta configurar un servicio de contacto.</small>
+        </form>
       </section>
     </section>
 
@@ -285,7 +396,71 @@
       </div>
     </section>
 
+    <section id="view-integrations" class="view workspace-page">
+      <div class="workspace-page__heading">
+        <div><p class="section-label">APLICACIONES</p><h2>Integraciones</h2><p>Reúne tus herramientas de estudio y trabajo. Solo una conexión confirmada por el servidor se presenta como conectada.</p></div>
+      </div>
+      <p class="integration-auth-notice" id="integration-auth-notice">Inicia sesión o crea una cuenta para conectar herramientas. En modo invitado puedes conocerlas, pero no autorizarlas.</p>
+      <div class="integration-grid">
+        <article class="integration-card" data-auth-only><img src="assets/img/integrations/google-calendar.svg" alt="Google Workspace" width="42" height="42"><div><h3>Google Workspace</h3><p>Conecta Calendar, Drive, Docs y YouTube.</p><small>Autorización OAuth por usuario</small></div><span class="integration-status" id="google-status">Desconectada</span><button class="btn btn--secondary integration-action" id="connect-google" data-requires-account>Conectar</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/google-drive.svg" alt="Google Drive" width="42" height="42"><div><h3>Google Drive</h3><p>Adjunta documentos a una tarea.</p><small>Requiere implementación OAuth específica</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/google-classroom.svg" alt="Google Classroom" width="42" height="42"><div><h3>Google Classroom</h3><p>Centraliza actividades y fechas de entrega.</p><small>Requiere API de Classroom</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/gmail.svg" alt="Gmail" width="42" height="42"><div><h3>Gmail</h3><p>Prepara recordatorios relacionados con tus tareas.</p><small>Requiere API de Gmail</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+        <article class="integration-card" data-auth-only><img src="assets/img/integrations/onedrive.svg" alt="Microsoft OneDrive" width="42" height="42"><div><h3>Microsoft 365</h3><p>Sube archivos a OneDrive mediante Microsoft Graph.</p><small>Autorización OAuth por usuario</small></div><span class="integration-status" id="microsoft-status">Desconectada</span><button class="btn btn--secondary integration-action" id="connect-microsoft" data-requires-account>Conectar</button></article>
+        <article class="integration-card"><img src="assets/img/integrations/teams.svg" alt="Microsoft Teams" width="42" height="42"><div><h3>Microsoft Teams</h3><p>Vincula tareas con el trabajo del equipo.</p><small>Requiere Microsoft Graph</small></div><span class="integration-status">Próximamente</span><button class="btn btn--ghost" disabled>Próximamente</button></article>
+      </div>
+    </section>
+
+    <section id="view-recordings" class="view workspace-page">
+      <div class="workspace-page__heading"><div><p class="section-label">CAPTURA LOCAL</p><h2>Grabaciones</h2><p>Graba pantalla o cámara con autorización explícita. TaskMaster no sube el archivo: permanece en tu dispositivo.</p></div></div>
+      <div class="recorder-layout">
+        <div class="recorder-options" aria-label="Seleccionar fuente">
+          <button class="record-source" data-record-source="screen">▣<span>Grabar pantalla</span></button>
+          <button class="record-source" data-record-source="camera">◉<span>Usar cámara</span></button>
+          <button class="record-source" data-record-source="screen-mic">▣<span>Pantalla y micrófono</span></button>
+          <button class="record-source" data-record-source="camera-mic">◉<span>Cámara y micrófono</span></button>
+        </div>
+        <div class="recorder-studio">
+          <div class="recorder-preview"><video id="recorder-video" autoplay muted playsinline></video><div class="recorder-placeholder" id="recorder-placeholder">Selecciona una fuente para solicitar permiso y preparar la vista previa.</div><span class="recording-indicator" id="recording-indicator" hidden><i></i> Grabando <b id="recording-timer">00:00</b></span></div>
+          <div class="recorder-controls">
+            <button class="btn btn--primary" id="record-start" disabled>Iniciar</button>
+            <button class="btn btn--secondary" id="record-pause" disabled>Pausar</button>
+            <button class="btn btn--danger" id="record-stop" disabled>Detener</button>
+            <button class="btn btn--ghost" id="record-discard" disabled>Descartar</button>
+            <a class="btn btn--secondary" id="record-download" hidden>Descargar WebM</a>
+            <a class="btn btn--youtube" id="record-youtube" href="https://www.youtube.com/upload" target="_blank" rel="noopener" hidden>Continuar en YouTube</a>
+            <button class="btn btn--youtube" id="record-youtube-api" hidden>Subir privado a YouTube</button>
+          </div>
+          <p class="recorder-status" id="recorder-status" role="status" aria-live="polite">La cámara, pantalla y el micrófono nunca se activan automáticamente.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-files" class="view workspace-page">
+      <div class="workspace-page__heading workspace-page__heading--files"><div><p class="section-label">DOCUMENTOS</p><h2>Archivos de trabajo</h2><p>Selecciona documentos de tu dispositivo y continúa su edición en las herramientas que utilizas. Los archivos no se suben automáticamente.</p></div></div>
+      <div class="file-workspace">
+        <label class="file-dropzone" for="workspace-files"><span class="file-dropzone__icon">⇧</span><strong>Seleccionar documentos o archivos</strong><small>PDF, documentos, hojas, imágenes y videos. Permanecen localmente hasta que elijas un servicio.</small><input id="workspace-files" type="file" multiple></label>
+        <div class="file-actions">
+          <a href="https://docs.google.com/document/u/0/" target="_blank" rel="noopener"><img src="assets/img/integrations/google-drive.svg" alt="" width="34" height="34"><span><strong>Abrir Google Docs</strong><small>Crear o editar en Google</small></span>↗</a>
+          <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener"><img src="assets/img/integrations/google-drive.svg" alt="" width="34" height="34"><span><strong>Abrir Google Drive</strong><small>Subir manualmente a Drive</small></span>↗</a>
+          <a href="https://onedrive.live.com/" target="_blank" rel="noopener"><img src="assets/img/integrations/onedrive.svg" alt="" width="34" height="34"><span><strong>Abrir OneDrive</strong><small>Subir manualmente a Microsoft</small></span>↗</a>
+        </div>
+        <div class="selected-files"><div class="section-header"><div><p class="section-label">SELECCIÓN LOCAL</p><h3>Archivos preparados</h3></div><div><button class="btn btn--primary" id="create-google-doc">Crear Google Doc</button> <button class="btn btn--secondary" id="upload-drive" disabled>Subir a Drive</button> <button class="btn btn--secondary" id="upload-onedrive" disabled>Subir a OneDrive</button> <button class="btn btn--ghost" id="clear-workspace-files" disabled>Limpiar</button></div></div><ul id="workspace-file-list"><li class="file-empty">Todavía no has seleccionado archivos.</li></ul></div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view workspace-page">
+      <div class="workspace-page__heading"><div><p class="section-label">PREFERENCIAS</p><h2>Configuración</h2><p>La identidad y los tokens se administran de forma segura durante la sesión. Ninguna contraseña se guarda en el navegador.</p></div></div>
+      <div class="settings-card"><h3>Privacidad de la sesión</h3><p>Cierra sesión cuando termines, especialmente si utilizas un equipo compartido.</p><button class="btn btn--ghost" data-action="public">Ver página pública</button></div>
+    </section>
+
   </main>
+
+  <footer class="public-footer" data-public-only>
+    <div><strong>TaskMaster</strong><p>Organización clara para avanzar con enfoque.</p></div>
+    <div><a href="#inicio">Inicio</a><a href="#integraciones">Integraciones</a><a href="#contacto">Contacto</a></div>
+    <p>© <span id="current-year"></span> TaskMaster · Proyecto académico</p>
+  </footer>
 
   <!-- Modal Nueva/Editar Tarea -->
   <div class="modal-overlay" id="modal-overlay">
@@ -421,13 +596,15 @@
     </div>
   </div>
 
-  <button class="fab" id="btn-fab-nueva-tarea" title="Nueva tarea">+</button>
+  <button class="fab" id="btn-fab-nueva-tarea" data-workspace-only title="Nueva tarea" aria-label="Crear una nueva tarea">+</button>
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Modal Auth (login/register) -->
   <div class="modal-overlay" id="modal-auth-overlay">
     <div class="modal modal--form" id="modal-auth">
-      <img src="assets/img/auth-hero.jpg" alt="Organiza tu día" class="modal__hero" />
+      <div class="auth-visual" aria-hidden="true">
+        <span>✓</span><span>Hoy</span><span>3 tareas</span>
+      </div>
       <div class="modal__header">
         <div>
           <p class="modal-label" id="auth-mode-label">Cuenta</p>
@@ -445,7 +622,7 @@
               <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
             </svg>
           </span>
-          Simulación de acceso con Google — solo necesitamos tu correo.
+          Google verificará tu identidad de forma segura. TaskMaster no recibe tu contraseña de Google.
         </p>
         <div class="form-row" id="row-nombre">
           <label class="field">
@@ -487,15 +664,18 @@
   </div>
 
   <!-- Scripts en orden MVVM: Model → ViewModel → View → App -->
-  <script src="assets/js/model/TaskModel.js"></script>
+  <script src="assets/js/model/TaskModel.js?v=20260913-2"></script>
   <script src="assets/js/model/MateriaModel.js"></script>
   <script src="assets/js/model/QuickAddParser.js"></script>
   <script src="assets/js/viewmodel/TaskViewModel.js"></script>
-  <script src="assets/js/view/HomeView.js"></script>
+  <script src="assets/js/view/HomeView.js?v=20260913-3"></script>
   <script src="assets/js/view/DashboardView.js"></script>
-  <script src="assets/js/view/ModalView.js"></script>
+  <script src="assets/js/view/ModalView.js?v=20260913-2"></script>
   <script src="assets/js/view/PomodoroView.js"></script>
-  <script src="assets/js/view/AuthView.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/js/view/AuthView.js?v=20260913-3"></script>
+  <script src="assets/js/view/RecordingView.js?v=20260913-3"></script>
+  <script src="assets/js/view/FileWorkspaceView.js?v=20260913-4"></script>
+  <script src="assets/js/view/IntegrationView.js?v=20260913-5"></script>
+  <script src="assets/js/app.js?v=20260913-8"></script>
 </body>
 </html>
