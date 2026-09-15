@@ -125,6 +125,12 @@ function hashSessionToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function createPkce() {
+  const verifier = randomBytes(48).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
+}
+
 function sessionCookie(token, maxAgeSeconds = null) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   const lifetime = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
@@ -681,11 +687,13 @@ app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
   try {
     if (!process.env.GOOGLE_INTEGRATION_REDIRECT_URI) throw new Error('Falta GOOGLE_INTEGRATION_REDIRECT_URI.');
     const state = randomBytes(32).toString('base64url');
-    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'google', expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
-    const url = googleIntegrationClient().generateAuthUrl({ access_type: 'offline', prompt: 'consent select_account', include_granted_scopes: true, state, scope: [
+    const pkce = createPkce();
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'google', code_verifier: pkce.verifier, expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
+    const url = googleIntegrationClient().generateAuthUrl({ access_type: 'offline', prompt: 'consent select_account', include_granted_scopes: true, state, code_challenge: pkce.challenge, code_challenge_method: 'S256', scope: [
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/classroom.courses.readonly',
       'https://www.googleapis.com/auth/youtube.upload'
     ] });
     res.redirect(url);
@@ -698,7 +706,7 @@ app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
     const snap = await ref.get();
     if (!snap.exists || snap.data().provider !== 'google' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
     await ref.delete();
-    const { tokens } = await googleIntegrationClient().getToken(req.query.code);
+    const { tokens } = await googleIntegrationClient().getToken({ code: req.query.code, codeVerifier: snap.data().code_verifier });
     await saveIntegration(req.user.id, 'google', tokens);
     res.redirect('/?integration=google');
   } catch (error) { console.error('GOOGLE INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=google'); }
@@ -710,8 +718,9 @@ app.get('/api/integrations/microsoft/start', requireAuth, async (req, res) => {
     const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
     if (!clientId || !redirectUri) throw new Error('Microsoft OAuth no configurado.');
     const state = randomBytes(32).toString('base64url');
-    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
-    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope: 'offline_access User.Read Files.ReadWrite', state });
+    const pkce = createPkce();
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', code_verifier: pkce.verifier, expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
+    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All', state, code_challenge: pkce.challenge, code_challenge_method: 'S256' });
     res.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
   } catch (error) { res.redirect('/?integration_error=microsoft_config'); }
 });
@@ -722,7 +731,7 @@ app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) =>
     const snap = await ref.get();
     if (!snap.exists || snap.data().provider !== 'microsoft' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
     await ref.delete();
-    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: 'offline_access User.Read Files.ReadWrite' });
+    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, code_verifier: snap.data().code_verifier, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All' });
     const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     const tokens = await response.json();
     if (!response.ok) throw new Error(tokens.error_description || 'Microsoft rechazó el token.');
@@ -733,8 +742,33 @@ app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) =>
 
 app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, async (req, res) => {
   if (!['google', 'microsoft'].includes(req.params.provider)) return res.status(400).json({ success: false, error: 'Proveedor inválido.' });
+  if (req.params.provider === 'google') {
+    const tokens = await readIntegration(req.user.id, 'google');
+    const token = tokens?.refresh_token || tokens?.access_token;
+    if (token) await googleIntegrationClient(tokens).revokeToken(token).catch(error => console.warn('GOOGLE TOKEN REVOCATION:', error.message));
+  }
   await integrationRef(req.user.id, req.params.provider).delete();
   res.json({ success: true });
+});
+
+app.get('/api/integrations/google/calendar/events', requireAuth, async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const calendar = google.calendar({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const result = await calendar.events.list({ calendarId: 'primary', timeMin: new Date().toISOString(), maxResults: 50, singleEvents: true, orderBy: 'startTime' });
+    res.json({ success: true, events: result.data.items || [] });
+  } catch (error) { res.status(502).json({ success: false, error: 'No se pudo consultar Calendar.' }); }
+});
+
+app.get('/api/integrations/google/classroom/courses', requireAuth, async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const classroom = google.classroom({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const result = await classroom.courses.list({ courseStates: ['ACTIVE'], pageSize: 50 });
+    res.json({ success: true, courses: result.data.courses || [] });
+  } catch (error) { res.status(502).json({ success: false, error: 'No se pudo consultar Classroom.' }); }
 });
 
 app.post('/api/integrations/google/docs', requireTrustedOrigin, requireAuth, async (req, res) => {
@@ -774,7 +808,7 @@ async function microsoftAccessToken(userId) {
   let tokens = await readIntegration(userId, 'microsoft');
   if (!tokens) return null;
   if (tokens.access_token && Date.now() < Number(tokens.acquired_at || 0) + (Number(tokens.expires_in || 3600) - 120) * 1000) return tokens.access_token;
-  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: 'offline_access User.Read Files.ReadWrite' });
+  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All' });
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
   const refreshed = await response.json();
   if (!response.ok) throw new Error('No se pudo renovar Microsoft OAuth.');
@@ -794,6 +828,26 @@ app.post('/api/integrations/microsoft/onedrive/upload', requireTrustedOrigin, re
     res.json({ success: true, file: { id: data.id, name: data.name, webUrl: data.webUrl } });
   } catch (error) { console.error('ONEDRIVE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir a OneDrive.' }); }
 });
+
+async function microsoftGraph(req, res, resource, resultKey) {
+  try {
+    const accessToken = await microsoftAccessToken(req.user.id);
+    if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
+    const response = await fetch(`https://graph.microsoft.com/v1.0/${resource}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Microsoft Graph rechazó la solicitud.');
+    res.json({ success: true, [resultKey]: data.value || [] });
+  } catch (error) {
+    console.error('MICROSOFT GRAPH ERROR:', error.message);
+    res.status(502).json({ success: false, error: `No se pudo consultar ${resultKey}.` });
+  }
+}
+
+app.get('/api/integrations/microsoft/calendar/events', requireAuth, (req, res) =>
+  microsoftGraph(req, res, 'me/calendar/events?$top=50&$orderby=start/dateTime', 'events'));
+
+app.get('/api/integrations/microsoft/teams', requireAuth, (req, res) =>
+  microsoftGraph(req, res, 'me/joinedTeams', 'teams'));
 
 // ── Notificaciones ───────────────────────────────────────────────────────
 
