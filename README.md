@@ -32,8 +32,8 @@ Si `serviceAccountKey.json` falta o es inválido, el servidor lo indica claramen
 calendario, Drive/OneDrive y Classroom/Teams.
 
 1. `cd integraciones && npm install`
-2. Copia `integraciones/.env.example` a `integraciones/.env` y completa las variables (reutiliza la misma clave de servicio de Firebase).
-3. `npm start`
+2. Completa también las credenciales OAuth descritas en `.env.example`.
+3. Ejecuta `npm start` únicamente desde la raíz.
 
 ## Estructura relevante
 
@@ -43,7 +43,7 @@ assets/js/model/        → capa Model (consumo de API + fallback localStorage)
 assets/js/viewmodel/     → capa ViewModel (estado de la app)
 assets/js/view/          → capa View (DOM, eventos, botones)
 assets/js/app.js         → coordinador de la app (App)
-integraciones/           → microservicio de integraciones externas
+integraciones/           → módulos heredados de referencia; no se inicia otro servidor
 ```
 
 ## Autenticación y modo invitado
@@ -104,13 +104,13 @@ OAuth está en modo de prueba, agrega cada correo permitido en **Usuarios de pru
 
 ## Seguridad de integraciones OAuth
 
-El microservicio de `integraciones/` valida la misma cookie `tm_session` de la aplicación
-principal. En desarrollo ambos servicios deben abrirse con el mismo hostname (por ejemplo,
-`localhost`, sin mezclarlo con `127.0.0.1`). En producción se recomienda publicarlos detrás
-del mismo dominio mediante un proxy inverso.
+`server.js` es el único backend activo y expone autenticación, tareas e integraciones bajo
+el mismo origen. El comando `npm start` dentro de `integraciones/` está bloqueado para evitar
+levantar accidentalmente un segundo backend.
 
 - Cada conexión Google o Microsoft pertenece al `usuario_id` autenticado.
-- OAuth usa un valor `state` aleatorio, almacenado por diez minutos y consumido una sola vez.
+- OAuth usa `state` de un solo uso y PKCE S256; el verificador se conserva diez minutos en
+  Firestore y se consume durante el callback.
 - Los access y refresh tokens se cifran con AES-256-GCM antes de guardarse en Firestore.
 - Calendar, Drive, Classroom, OneDrive, Teams, email e ICS requieren sesión.
 - Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
