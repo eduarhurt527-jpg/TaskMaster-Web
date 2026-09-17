@@ -2,10 +2,12 @@ class IntegrationView {
   constructor(app) {
     this.app = app;
     this.google = document.getElementById('connect-google');
+    this.youtube = document.getElementById('connect-youtube');
     this.microsoft = document.getElementById('connect-microsoft');
     this.gmail = document.getElementById('use-gmail');
     this.gmailCompose = document.getElementById('gmail-compose');
     this.google?.addEventListener('click', () => this.connect('google'));
+    this.youtube?.addEventListener('click', () => this.connect('youtube'));
     this.microsoft?.addEventListener('click', () => this.connect('microsoft'));
     this.gmail?.addEventListener('click', () => this.openGmailComposer());
     this.gmailCompose?.addEventListener('submit', event => this.sendGmail(event));
@@ -15,8 +17,10 @@ class IntegrationView {
   }
   connect(provider) {
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
-    const button = provider === 'google' ? this.google : this.microsoft;
-    const providerName = provider === 'google' ? 'Google' : 'Microsoft';
+    const buttons = { google: this.google, youtube: this.youtube, microsoft: this.microsoft };
+    const names = { google: 'Google', youtube: 'YouTube', microsoft: 'Microsoft' };
+    const button = buttons[provider];
+    const providerName = names[provider];
     if (button) {
       button.disabled = true;
       button.textContent = `Abriendo ${providerName}…`;
@@ -35,12 +39,13 @@ class IntegrationView {
       const data = await response.json();
       if (!response.ok) throw new Error('No pudimos comprobar tus conexiones en este momento.');
       this._render('google', data.google);
+      this._render('youtube', data.youtube);
       this._render('microsoft', data.microsoft);
       this._renderService('drive', data.google);
       this._renderService('classroom', data.google);
       this._renderService('gmail', data.google);
       this._renderService('teams', data.microsoft);
-      if (notice) notice.textContent = data.google || data.microsoft
+      if (notice) notice.textContent = data.google || data.youtube || data.microsoft
         ? 'Tus servicios vinculados están listos. Puedes volver a autorizar una cuenta cuando necesites cambiar permisos.'
         : 'Todavía no has vinculado servicios. Puedes abrirlos directamente o vincularlos para trabajar desde TaskMaster.';
     } catch (error) {
@@ -50,9 +55,11 @@ class IntegrationView {
   }
   _render(provider, connected) {
     const status = document.getElementById(`${provider}-status`);
-    const button = provider === 'google' ? this.google : this.microsoft;
+    const button = { google: this.google, youtube: this.youtube, microsoft: this.microsoft }[provider];
     if (status) { status.textContent = connected ? 'Vinculada' : 'Sin vincular'; status.classList.toggle('integration-status--available', connected); }
-    if (button) button.textContent = connected ? 'Volver a vincular' : 'Vincular con TaskMaster';
+    if (button) button.textContent = connected
+      ? 'Volver a vincular'
+      : provider === 'youtube' ? 'Vincular YouTube' : 'Vincular con TaskMaster';
   }
 
   _renderService(service, connected) {

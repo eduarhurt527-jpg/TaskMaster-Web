@@ -20,6 +20,10 @@ test('OAuth usa state, PKCE S256, tokens cifrados y revocación', async () => {
   assert.match(server, /createCipheriv\('aes-256-gcm'/);
   assert.match(server, /revokeToken\(token\)/);
   assert.match(server, /integrationRef\(req\.user\.id, req\.params\.provider\)\.delete/);
+  assert.match(server, /\/api\/integrations\/youtube\/start/);
+  assert.match(server, /\/api\/integrations\/youtube\/callback/);
+  const googleScopes = server.match(/app\.get\('\/api\/integrations\/google\/start'[\s\S]*?res\.redirect\(url\);/)?.[0] || '';
+  assert.doesNotMatch(googleScopes, /youtube\.upload/);
 });
 
 test('las rutas privadas derivan el propietario de la sesión', async () => {
@@ -49,7 +53,7 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   const index = await read('../index.html');
   const integrationView = await read('../assets/js/view/IntegrationView.js');
   const authView = await read('../assets/js/view/AuthView.js');
-  for (const id of ['drive-status', 'classroom-status', 'teams-status']) {
+  for (const id of ['drive-status', 'classroom-status', 'youtube-status', 'teams-status']) {
     assert.match(index, new RegExp(`id="${id}"`));
   }
   assert.match(integrationView, /_renderService\('drive', data\.google\)/);
@@ -60,12 +64,15 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   assert.match(index, /id="gmail-compose"/);
   assert.match(integrationView, /google\/gmail\/send/);
   assert.match(integrationView, /_renderService\('gmail', data\.google\)/);
+  assert.match(integrationView, /_render\('youtube', data\.youtube\)/);
+  assert.match(index, /id="connect-youtube"/);
   assert.match(index, /Cómo funcionan las integraciones/);
   assert.match(index, /aria-live="polite"/);
   assert.match(integrationView, /Abriendo \$\{providerName\}/);
   assert.match(authView, /params\.has\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);
+  assert.match(authView, /YouTube conectado/);
 });
 
 test('los principios UX exigen lenguaje humano y recuperación clara', async () => {

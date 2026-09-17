@@ -200,6 +200,9 @@ class AuthView {
     } else if (params.get('integration') === 'microsoft') {
       this.app.showToast('Microsoft 365 conectado', 'success');
       this.app.integrationView?.refresh();
+    } else if (params.get('integration') === 'youtube') {
+      this.app.showToast('YouTube conectado', 'success');
+      this.app.integrationView?.refresh();
     } else if (params.get('auth_error') === 'google_config') {
       this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
     } else if (params.get('auth_error') === 'google') {

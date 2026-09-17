@@ -116,6 +116,9 @@ levantar accidentalmente un segundo backend.
 - Gmail solicita únicamente `gmail.send`: permite enviar desde la cuenta vinculada, pero no
   leer la bandeja de entrada. Después de incorporar este permiso, las conexiones Google
   existentes deben volver a autorizarse una vez.
+- YouTube se vincula mediante un flujo OAuth independiente porque Google no permite solicitar
+  `drive.file` y `youtube.upload` juntos. Configura `YOUTUBE_INTEGRATION_REDIRECT_URI` y registra
+  esa URI en el mismo cliente web de Google Cloud.
 - Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
 - La interfaz permite desconectar cada proveedor y borrar sus tokens almacenados.
 

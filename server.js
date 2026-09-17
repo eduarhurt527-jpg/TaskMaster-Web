@@ -187,6 +187,14 @@ function googleIntegrationClient(tokens = null) {
   return client;
 }
 
+function youtubeIntegrationClient(tokens = null) {
+  const redirectUri = process.env.YOUTUBE_INTEGRATION_REDIRECT_URI;
+  if (!redirectUri) throw new Error('YouTube todavía no está configurado para vincularse.');
+  const client = new google.auth.OAuth2(process.env.GOOGLE_LOGIN_CLIENT_ID, process.env.GOOGLE_LOGIN_CLIENT_SECRET, redirectUri);
+  if (tokens) client.setCredentials(tokens);
+  return client;
+}
+
 async function createSession(res, user, additionalCookies = []) {
   const token = randomBytes(32).toString('base64url');
   const tokenHash = hashSessionToken(token);
@@ -679,8 +687,12 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 
 // ── Integraciones OAuth y archivos ──────────────────────────────────────
 app.get('/api/integrations/status', requireAuth, async (req, res) => {
-  const [googleDoc, microsoftDoc] = await Promise.all([integrationRef(req.user.id, 'google').get(), integrationRef(req.user.id, 'microsoft').get()]);
-  res.json({ success: true, google: googleDoc.exists, microsoft: microsoftDoc.exists });
+  const [googleDoc, youtubeDoc, microsoftDoc] = await Promise.all([
+    integrationRef(req.user.id, 'google').get(),
+    integrationRef(req.user.id, 'youtube').get(),
+    integrationRef(req.user.id, 'microsoft').get(),
+  ]);
+  res.json({ success: true, google: googleDoc.exists, youtube: youtubeDoc.exists, microsoft: microsoftDoc.exists });
 });
 
 app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
@@ -694,11 +706,50 @@ app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/classroom.courses.readonly',
-      'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/gmail.send'
     ] });
     res.redirect(url);
   } catch (error) { res.redirect('/?integration_error=google_config'); }
+});
+
+app.get('/api/integrations/youtube/start', requireAuth, async (req, res) => {
+  try {
+    const state = randomBytes(32).toString('base64url');
+    const pkce = createPkce();
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({
+      user_id: req.user.id,
+      provider: 'youtube',
+      code_verifier: pkce.verifier,
+      expires_at: Date.now() + GOOGLE_STATE_TTL_MS,
+    });
+    const url = youtubeIntegrationClient().generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent select_account',
+      state,
+      code_challenge: pkce.challenge,
+      code_challenge_method: 'S256',
+      scope: ['https://www.googleapis.com/auth/youtube.upload'],
+    });
+    res.redirect(url);
+  } catch (error) {
+    console.error('YOUTUBE INTEGRATION START ERROR:', error.message);
+    res.redirect('/?integration_error=youtube_config');
+  }
+});
+
+app.get('/api/integrations/youtube/callback', requireAuth, async (req, res) => {
+  try {
+    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().provider !== 'youtube' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('La autorización ya no es válida. Intenta vincular YouTube nuevamente.');
+    await ref.delete();
+    const { tokens } = await youtubeIntegrationClient().getToken({ code: req.query.code, codeVerifier: snap.data().code_verifier });
+    await saveIntegration(req.user.id, 'youtube', tokens);
+    res.redirect('/?integration=youtube');
+  } catch (error) {
+    console.error('YOUTUBE INTEGRATION ERROR:', error.message);
+    res.redirect('/?integration_error=youtube');
+  }
 });
 
 app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
@@ -742,11 +793,12 @@ app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) =>
 });
 
 app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, async (req, res) => {
-  if (!['google', 'microsoft'].includes(req.params.provider)) return res.status(400).json({ success: false, error: 'Proveedor inválido.' });
-  if (req.params.provider === 'google') {
-    const tokens = await readIntegration(req.user.id, 'google');
+  if (!['google', 'youtube', 'microsoft'].includes(req.params.provider)) return res.status(400).json({ success: false, error: 'No reconocemos el servicio que intentas desconectar.' });
+  if (['google', 'youtube'].includes(req.params.provider)) {
+    const tokens = await readIntegration(req.user.id, req.params.provider);
     const token = tokens?.refresh_token || tokens?.access_token;
-    if (token) await googleIntegrationClient(tokens).revokeToken(token).catch(error => console.warn('GOOGLE TOKEN REVOCATION:', error.message));
+    const client = req.params.provider === 'youtube' ? youtubeIntegrationClient(tokens) : googleIntegrationClient(tokens);
+    if (token) await client.revokeToken(token).catch(error => console.warn('GOOGLE TOKEN REVOCATION:', error.message));
   }
   await integrationRef(req.user.id, req.params.provider).delete();
   res.json({ success: true });
@@ -796,10 +848,10 @@ app.post('/api/integrations/google/drive/upload', requireTrustedOrigin, requireA
 
 app.post('/api/integrations/google/youtube/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'video/webm', limit: '100mb' }), async (req, res) => {
   try {
-    const tokens = await readIntegration(req.user.id, 'google');
-    if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
+    const tokens = await readIntegration(req.user.id, 'youtube');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Vincula YouTube con TaskMaster antes de subir el video.' });
     const { Readable } = await import('stream');
-    const youtube = google.youtube({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const youtube = google.youtube({ version: 'v3', auth: youtubeIntegrationClient(tokens) });
     const result = await youtube.videos.insert({ part: ['snippet','status'], requestBody: { snippet: { title: String(req.get('X-Video-Title') || 'Grabación TaskMaster').slice(0, 100) }, status: { privacyStatus: 'private' } }, media: { body: Readable.from(req.body) } });
     res.json({ success: true, videoId: result.data.id, url: `https://youtu.be/${result.data.id}` });
   } catch (error) { console.error('YOUTUBE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir el video.' }); }
