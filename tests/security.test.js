@@ -81,3 +81,17 @@ test('los principios UX exigen lenguaje humano y recuperación clara', async () 
   assert.match(principles, /Recuperación clara/);
   assert.match(principles, /Accesibilidad/);
 });
+
+test('la sesión se restaura antes del primer render y la cabecera no se superpone', async () => {
+  const index = await read('../index.html');
+  const app = await read('../assets/js/app.js');
+  const auth = await read('../assets/js/view/AuthView.js');
+  const css = await read('../assets/css/main.css');
+  assert.match(index, /data-screen="loading"/);
+  assert.match(auth, /this\.ready = this\._restoreUser\(\)/);
+  assert.match(app, /await this\.authView\.ready/);
+  assert.match(css, /\.header-inner\s*\{[\s\S]*?display:\s*grid/);
+  const headerActions = css.match(/\.header-actions\s*\{[\s\S]*?\}/)?.[0] || '';
+  assert.doesNotMatch(headerActions, /position:\s*absolute/);
+  assert.match(headerActions, /flex-wrap:\s*wrap/);
+});

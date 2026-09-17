@@ -409,9 +409,13 @@ class App {
   // ── Inicialización ────────────────────────────────────────────────────────
 
   async _iniciar() {
+    // Resolver primero la sesión evita renderizar la portada y reemplazarla
+    // inmediatamente por el panel (parpadeo o layout shift).
+    await this.authView.ready;
     this._applyAccessState();
     await taskViewModel.cargarTareas();
     this.homeView.render();
+    document.body.setAttribute('aria-busy', 'false');
   }
 
   // ── Toast global ──────────────────────────────────────────────────────────

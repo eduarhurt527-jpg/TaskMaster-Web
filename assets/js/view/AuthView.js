@@ -19,7 +19,9 @@ class AuthView {
     this.mode = 'login'; // or 'register'
 
     this._bind();
-    this._restoreUser();
+    // App espera esta promesa antes del primer render. Así la portada y el
+    // espacio privado no se alternan mientras se comprueba la cookie.
+    this.ready = this._restoreUser();
   }
 
   _bind() {
@@ -167,11 +169,8 @@ class AuthView {
       const data = await res.json();
       if (res.ok && data.success && data.user) {
         sessionStorage.setItem('tm_user', JSON.stringify(data.user));
+        if (shouldRestore) this.app.screen = 'workspace';
         this.app.setUser(data.user);
-        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
-        if (params.get('login') === 'google' || params.has('integration') || params.has('integration_error')) {
-          this.app.enterWorkspace();
-        }
         this._handleOAuthResult();
         return;
       }
