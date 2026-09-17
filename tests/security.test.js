@@ -41,3 +41,19 @@ test('solo el backend raíz queda habilitado para iniciar', async () => {
   const integrationsPackage = JSON.parse(await read('../integraciones/package.json'));
   assert.match(integrationsPackage.scripts.start, /unico backend activo/);
 });
+
+test('las integraciones implementadas no se presentan como próximas', async () => {
+  const index = await read('../index.html');
+  const integrationView = await read('../assets/js/view/IntegrationView.js');
+  const authView = await read('../assets/js/view/AuthView.js');
+  for (const id of ['drive-status', 'classroom-status', 'teams-status']) {
+    assert.match(index, new RegExp(`id="${id}"`));
+  }
+  assert.match(integrationView, /google\/classroom\/courses/);
+  assert.match(integrationView, /microsoft\/teams/);
+  assert.match(integrationView, /_renderService\('drive', data\.google\)/);
+  assert.match(index, /<h3>Gmail<\/h3>[\s\S]*?Próximamente/);
+  assert.match(authView, /params\.has\('integration'\)/);
+  assert.match(authView, /Google Workspace conectado/);
+  assert.match(authView, /Microsoft 365 conectado/);
+});
