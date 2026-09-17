@@ -19,7 +19,9 @@ class AuthView {
     this.mode = 'login'; // or 'register'
 
     this._bind();
-    this._restoreUser();
+    // App espera esta promesa antes del primer render. Así la portada y el
+    // espacio privado no se alternan mientras se comprueba la cookie.
+    this.ready = this._restoreUser();
   }
 
   _bind() {
@@ -132,7 +134,10 @@ class AuthView {
 
   async _restoreUser() {
     const params = new URLSearchParams(window.location.search);
-    const shouldRestore = params.get('workspace') === '1' || params.get('login') === 'google';
+    const shouldRestore = params.get('workspace') === '1'
+      || params.get('login') === 'google'
+      || params.has('integration')
+      || params.has('integration_error');
 
     // `/` representa la portada pública. No reutilizar allí la cuenta de una visita
     // anterior, especialmente en equipos compartidos.
@@ -164,11 +169,8 @@ class AuthView {
       const data = await res.json();
       if (res.ok && data.success && data.user) {
         sessionStorage.setItem('tm_user', JSON.stringify(data.user));
+        if (shouldRestore) this.app.screen = 'workspace';
         this.app.setUser(data.user);
-        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
-        if (new URLSearchParams(window.location.search).get('login') === 'google') {
-          this.app.enterWorkspace();
-        }
         this._handleOAuthResult();
         return;
       }
@@ -191,15 +193,28 @@ class AuthView {
     const params = new URLSearchParams(window.location.search);
     if (params.get('login') === 'google') {
       this.app.showToast('Sesión iniciada con Google', 'success');
+    } else if (params.get('integration') === 'google') {
+      this.app.showToast('Google Workspace conectado', 'success');
+      this.app.integrationView?.refresh();
+    } else if (params.get('integration') === 'microsoft') {
+      this.app.showToast('Microsoft 365 conectado', 'success');
+      this.app.integrationView?.refresh();
+    } else if (params.get('integration') === 'youtube') {
+      this.app.showToast('YouTube conectado', 'success');
+      this.app.integrationView?.refresh();
     } else if (params.get('auth_error') === 'google_config') {
       this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
     } else if (params.get('auth_error') === 'google') {
       this.app.showToast('Google no pudo verificar el inicio de sesión', 'error');
+    } else if (params.get('integration_error')) {
+      this.app.showToast('No se pudo completar la conexión de la integración', 'error');
     } else {
       return;
     }
     params.delete('login');
     params.delete('auth_error');
+    params.delete('integration');
+    params.delete('integration_error');
     if (this.app.accessMode === 'authenticated') params.set('workspace', '1');
     const query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));

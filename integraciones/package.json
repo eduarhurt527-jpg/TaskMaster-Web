@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node -e \"console.error('Use npm start desde la raiz: server.js es el unico backend activo.'); process.exit(1)\"",
+    "audit:security": "npm audit --omit=dev"
   },
   "dependencies": {
     "cors": "^2.8.5",
