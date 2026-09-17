@@ -3,8 +3,15 @@ class IntegrationView {
     this.app = app;
     this.google = document.getElementById('connect-google');
     this.microsoft = document.getElementById('connect-microsoft');
+    this.gmail = document.getElementById('use-gmail');
+    this.gmailCompose = document.getElementById('gmail-compose');
     this.google?.addEventListener('click', () => this.connect('google'));
     this.microsoft?.addEventListener('click', () => this.connect('microsoft'));
+    this.gmail?.addEventListener('click', () => this.openGmailComposer());
+    this.gmailCompose?.addEventListener('submit', event => this.sendGmail(event));
+    document.getElementById('close-gmail-compose')?.addEventListener('click', () => {
+      this.gmailCompose.hidden = true;
+    });
   }
   connect(provider) {
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
@@ -20,6 +27,7 @@ class IntegrationView {
       this._render('microsoft', data.microsoft);
       this._renderService('drive', data.google);
       this._renderService('classroom', data.google);
+      this._renderService('gmail', data.google);
       this._renderService('teams', data.microsoft);
     } catch (error) { console.warn('No se pudo consultar integraciones', error); }
   }
@@ -35,6 +43,45 @@ class IntegrationView {
     if (status) {
       status.textContent = connected ? 'Vinculada' : 'Acceso externo';
       status.classList.toggle('integration-status--available', connected);
+    }
+    const button = document.getElementById(`use-${service}`);
+    if (button?.tagName === 'BUTTON') button.disabled = !connected;
+  }
+
+  openGmailComposer() {
+    if (this.gmail?.disabled) return;
+    this.gmailCompose.hidden = false;
+    document.getElementById('gmail-to')?.focus();
+    this.gmailCompose.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async sendGmail(event) {
+    event.preventDefault();
+    const submit = document.getElementById('send-gmail');
+    const payload = {
+      to: document.getElementById('gmail-to').value.trim(),
+      subject: document.getElementById('gmail-subject').value.trim(),
+      message: document.getElementById('gmail-message').value.trim(),
+    };
+    submit.disabled = true;
+    submit.textContent = 'Enviando…';
+    try {
+      const response = await fetch('/api/integrations/google/gmail/send', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo enviar el correo.');
+      this.gmailCompose.reset();
+      this.gmailCompose.hidden = true;
+      this.app.showToast('Correo enviado con Gmail', 'success');
+    } catch (error) {
+      this.app.showToast(error.message, 'error');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Enviar con Gmail';
     }
   }
 }

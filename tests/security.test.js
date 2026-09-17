@@ -29,6 +29,9 @@ test('las rutas privadas derivan el propietario de la sesión', async () => {
   assert.match(server, /\/api\/integrations\/google\/calendar\/events/);
   assert.match(server, /\/api\/integrations\/google\/classroom\/courses/);
   assert.match(server, /\/api\/integrations\/microsoft\/teams/);
+  assert.match(server, /\/api\/integrations\/google\/gmail\/send/);
+  assert.match(server, /google\.gmail\(\{ version: 'v1'/);
+  assert.match(server, /https:\/\/www\.googleapis\.com\/auth\/gmail\.send/);
 });
 
 test('el frontend no usa PHP para autenticación', async () => {
@@ -54,7 +57,9 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   assert.match(index, /https:\/\/classroom\.google\.com\//);
   assert.match(index, /https:\/\/mail\.google\.com\//);
   assert.match(index, /https:\/\/teams\.microsoft\.com\//);
-  assert.match(index, /El envío directo desde TaskMaster aún no está disponible/);
+  assert.match(index, /id="gmail-compose"/);
+  assert.match(integrationView, /google\/gmail\/send/);
+  assert.match(integrationView, /_renderService\('gmail', data\.google\)/);
   assert.match(authView, /params\.has\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);

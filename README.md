@@ -113,6 +113,9 @@ levantar accidentalmente un segundo backend.
   Firestore y se consume durante el callback.
 - Los access y refresh tokens se cifran con AES-256-GCM antes de guardarse en Firestore.
 - Calendar, Drive, Classroom, OneDrive, Teams, email e ICS requieren sesión.
+- Gmail solicita únicamente `gmail.send`: permite enviar desde la cuenta vinculada, pero no
+  leer la bandeja de entrada. Después de incorporar este permiso, las conexiones Google
+  existentes deben volver a autorizarse una vez.
 - Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
 - La interfaz permite desconectar cada proveedor y borrar sus tokens almacenados.
 

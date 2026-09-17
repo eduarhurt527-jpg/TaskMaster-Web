@@ -694,7 +694,8 @@ app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/classroom.courses.readonly',
-      'https://www.googleapis.com/auth/youtube.upload'
+      'https://www.googleapis.com/auth/youtube.upload',
+      'https://www.googleapis.com/auth/gmail.send'
     ] });
     res.redirect(url);
   } catch (error) { res.redirect('/?integration_error=google_config'); }
@@ -802,6 +803,44 @@ app.post('/api/integrations/google/youtube/upload', requireTrustedOrigin, requir
     const result = await youtube.videos.insert({ part: ['snippet','status'], requestBody: { snippet: { title: String(req.get('X-Video-Title') || 'Grabación TaskMaster').slice(0, 100) }, status: { privacyStatus: 'private' } }, media: { body: Readable.from(req.body) } });
     res.json({ success: true, videoId: result.data.id, url: `https://youtu.be/${result.data.id}` });
   } catch (error) { console.error('YOUTUBE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir el video.' }); }
+});
+
+app.post('/api/integrations/google/gmail/send', requireTrustedOrigin, requireAuth, async (req, res) => {
+  try {
+    const tokens = await readIntegration(req.user.id, 'google');
+    if (!tokens) return res.status(409).json({ success: false, error: 'Vincula Google con TaskMaster primero.' });
+
+    const to = String(req.body.to || '').trim().toLowerCase();
+    const subject = String(req.body.subject || '').trim();
+    const message = String(req.body.message || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || to.length > 254) {
+      return res.status(400).json({ success: false, error: 'Introduce un destinatario válido.' });
+    }
+    if (!subject || subject.length > 160) {
+      return res.status(400).json({ success: false, error: 'El asunto es obligatorio y admite hasta 160 caracteres.' });
+    }
+    if (!message || message.length > 10000) {
+      return res.status(400).json({ success: false, error: 'El mensaje es obligatorio y admite hasta 10 000 caracteres.' });
+    }
+
+    const encodedSubject = Buffer.from(subject, 'utf8').toString('base64');
+    const mime = [
+      `To: ${to}`,
+      `Subject: =?UTF-8?B?${encodedSubject}?=`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      message,
+    ].join('\r\n');
+    const raw = Buffer.from(mime, 'utf8').toString('base64url');
+    const gmail = google.gmail({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const result = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+    res.json({ success: true, messageId: result.data.id || null });
+  } catch (error) {
+    console.error('GMAIL SEND ERROR:', error.message);
+    res.status(502).json({ success: false, error: 'No se pudo enviar el correo con Gmail.' });
+  }
 });
 
 async function microsoftAccessToken(userId) {
