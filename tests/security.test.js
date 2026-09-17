@@ -49,10 +49,12 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   for (const id of ['drive-status', 'classroom-status', 'teams-status']) {
     assert.match(index, new RegExp(`id="${id}"`));
   }
-  assert.match(integrationView, /google\/classroom\/courses/);
-  assert.match(integrationView, /microsoft\/teams/);
   assert.match(integrationView, /_renderService\('drive', data\.google\)/);
-  assert.match(index, /<h3>Gmail<\/h3>[\s\S]*?Próximamente/);
+  assert.match(index, /https:\/\/drive\.google\.com\/drive\/my-drive/);
+  assert.match(index, /https:\/\/classroom\.google\.com\//);
+  assert.match(index, /https:\/\/mail\.google\.com\//);
+  assert.match(index, /https:\/\/teams\.microsoft\.com\//);
+  assert.match(index, /El envío directo desde TaskMaster aún no está disponible/);
   assert.match(authView, /params\.has\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);
