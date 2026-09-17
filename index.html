@@ -398,9 +398,13 @@
 
     <section id="view-integrations" class="view workspace-page">
       <div class="workspace-page__heading">
-        <div><p class="section-label">APLICACIONES</p><h2>Integraciones</h2><p>Reúne tus herramientas de estudio y trabajo. Solo una conexión confirmada por el servidor se presenta como conectada.</p></div>
+        <div><p class="section-label">TUS HERRAMIENTAS</p><h2>Todo lo que usas, en un solo lugar</h2><p>Abre tus servicios habituales o vincúlalos cuando quieras trabajar con ellos sin salir de TaskMaster.</p></div>
       </div>
-      <p class="integration-auth-notice" id="integration-auth-notice">Inicia sesión o crea una cuenta para conectar herramientas. En modo invitado puedes conocerlas, pero no autorizarlas.</p>
+      <div class="integration-guide" aria-label="Cómo funcionan las integraciones">
+        <div><span>↗</span><p><strong>Abrir servicio</strong><small>Te lleva a la aplicación oficial. Si hace falta, allí podrás iniciar sesión.</small></p></div>
+        <div><span>✓</span><p><strong>Vincular con TaskMaster</strong><small>Permite realizar acciones desde aquí. Tú eliges los permisos y puedes retirarlos.</small></p></div>
+      </div>
+      <p class="integration-auth-notice" id="integration-auth-notice" role="status" aria-live="polite">Inicia sesión para vincular servicios. También puedes abrir sus aplicaciones oficiales sin conceder permisos a TaskMaster.</p>
       <div class="integration-grid">
         <article class="integration-card" data-auth-only><a href="https://workspace.google.com/" target="_blank" rel="noopener" aria-label="Abrir Google Workspace"><img src="assets/img/integrations/google-calendar.svg" alt="Google Workspace" width="42" height="42"></a><div><h3>Google Workspace</h3><p>Conecta Calendar, Drive, Docs, Classroom y YouTube.</p><small>Vincula tu cuenta para sincronizar con TaskMaster</small></div><span class="integration-status" id="google-status">Desconectada</span><button class="btn btn--secondary integration-action" id="connect-google" data-requires-account>Vincular con TaskMaster</button></article>
         <article class="integration-card"><a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener" aria-label="Abrir Google Drive"><img src="assets/img/integrations/google-drive.svg" alt="Google Drive" width="42" height="42"></a><div><h3>Google Drive</h3><p>Adjunta documentos a una tarea.</p><small>Abre Drive o vincula Google para subir desde TaskMaster</small></div><span class="integration-status" id="drive-status">Acceso externo</span><a class="btn btn--secondary" id="use-drive" href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Abrir Drive</a></article>
@@ -605,7 +609,7 @@
   </div>
 
   <button class="fab" id="btn-fab-nueva-tarea" data-workspace-only title="Nueva tarea" aria-label="Crear una nueva tarea">+</button>
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Modal Auth (login/register) -->
   <div class="modal-overlay" id="modal-auth-overlay">

@@ -1752,8 +1752,12 @@ body.sidebar-collapsed[data-screen="workspace"] .app-main { margin-left: 76px; }
 .workspace-page__heading { padding: 28px; border-radius: 26px; color: #fff; background: linear-gradient(130deg,#17233f,#4338ca 68%,#0891b2); }
 .workspace-page__heading h2 { margin: 6px 0 10px; font-size: clamp(2rem,4vw,3.2rem); }
 .workspace-page__heading p { max-width: 720px; line-height: 1.65; color: #dbeafe; }
-.integration-auth-notice { margin: 22px 0; padding: 14px 18px; color: #805000; background: #fff6df; border: 1px solid #f4d38b; border-radius: 14px; }
-body[data-access="authenticated"] .integration-auth-notice { display: none; }
+.integration-auth-notice { margin: 14px 0 0; padding: 12px 14px; border-left: 3px solid #6d7ff2; border-radius: 8px 12px 12px 8px; color: #526079; background: #f5f7ff; }
+.integration-guide { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+.integration-guide > div { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid #e2e7f0; border-radius: 16px; background: #f8faff; }
+.integration-guide > div > span { flex: 0 0 34px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: #3853c7; background: #e8edff; font-weight: 900; }
+.integration-guide p { display: grid; gap: 3px; margin: 0; color: #27344f; }
+.integration-guide small { color: #69758c; line-height: 1.35; }
 .integration-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 24px; }
 .integration-card { position: relative; min-height: 180px; padding: 23px; display: grid; grid-template-columns: 62px 1fr; gap: 13px; align-items: start; border: 1px solid #e2e7f0; border-radius: 22px; background: #fff; box-shadow: 0 12px 34px rgba(33,47,82,.07); }
 .integration-card > a[aria-label^="Abrir"] { position: relative; width: 58px; height: 58px; display: grid; place-items: center; border: 1px solid #e4e9f2; border-radius: 16px; background: linear-gradient(145deg,#fff,#f6f8fc); box-shadow: 0 7px 18px rgba(33,47,82,.09); text-decoration: none; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
@@ -1798,7 +1802,7 @@ body[data-access="guest"] .integration-action { pointer-events: none; opacity: .
   .sidebar-link { width: 52px; min-width: 52px; justify-content: center; padding: 8px; }
   body[data-screen="workspace"] .app-header,body[data-screen="workspace"] .app-main,
   body.sidebar-collapsed[data-screen="workspace"] .app-header,body.sidebar-collapsed[data-screen="workspace"] .app-main { margin-left: 0; }
-  .integration-grid,.recorder-layout { grid-template-columns: 1fr; }
+  .integration-grid,.integration-guide,.recorder-layout { grid-template-columns: 1fr; }
   .recorder-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 560px) {

@@ -15,26 +15,43 @@ class IntegrationView {
   }
   connect(provider) {
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
+    const button = provider === 'google' ? this.google : this.microsoft;
+    const providerName = provider === 'google' ? 'Google' : 'Microsoft';
+    if (button) {
+      button.disabled = true;
+      button.textContent = `Abriendo ${providerName}…`;
+    }
     window.location.assign(`/api/integrations/${provider}/start`);
   }
   async refresh() {
-    if (this.app.accessMode !== 'authenticated') return;
+    const notice = document.getElementById('integration-auth-notice');
+    if (this.app.accessMode !== 'authenticated') {
+      if (notice) notice.textContent = 'Inicia sesión para vincular servicios. También puedes abrir sus aplicaciones oficiales sin conceder permisos a TaskMaster.';
+      return;
+    }
+    if (notice) notice.textContent = 'Estamos comprobando tus conexiones…';
     try {
       const response = await fetch('/api/integrations/status', { credentials: 'include' });
       const data = await response.json();
-      if (!response.ok) return;
+      if (!response.ok) throw new Error('No pudimos comprobar tus conexiones en este momento.');
       this._render('google', data.google);
       this._render('microsoft', data.microsoft);
       this._renderService('drive', data.google);
       this._renderService('classroom', data.google);
       this._renderService('gmail', data.google);
       this._renderService('teams', data.microsoft);
-    } catch (error) { console.warn('No se pudo consultar integraciones', error); }
+      if (notice) notice.textContent = data.google || data.microsoft
+        ? 'Tus servicios vinculados están listos. Puedes volver a autorizar una cuenta cuando necesites cambiar permisos.'
+        : 'Todavía no has vinculado servicios. Puedes abrirlos directamente o vincularlos para trabajar desde TaskMaster.';
+    } catch (error) {
+      console.warn('No se pudo consultar integraciones', error);
+      if (notice) notice.textContent = 'No pudimos comprobar tus conexiones. Revisa tu conexión a internet y vuelve a abrir esta sección.';
+    }
   }
   _render(provider, connected) {
     const status = document.getElementById(`${provider}-status`);
     const button = provider === 'google' ? this.google : this.microsoft;
-    if (status) { status.textContent = connected ? 'Conectada' : 'Desconectada'; status.classList.toggle('integration-status--available', connected); }
+    if (status) { status.textContent = connected ? 'Vinculada' : 'Sin vincular'; status.classList.toggle('integration-status--available', connected); }
     if (button) button.textContent = connected ? 'Volver a vincular' : 'Vincular con TaskMaster';
   }
 

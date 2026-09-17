@@ -60,7 +60,17 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   assert.match(index, /id="gmail-compose"/);
   assert.match(integrationView, /google\/gmail\/send/);
   assert.match(integrationView, /_renderService\('gmail', data\.google\)/);
+  assert.match(index, /Cómo funcionan las integraciones/);
+  assert.match(index, /aria-live="polite"/);
+  assert.match(integrationView, /Abriendo \$\{providerName\}/);
   assert.match(authView, /params\.has\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);
+});
+
+test('los principios UX exigen lenguaje humano y recuperación clara', async () => {
+  const principles = await read('../docs/UX-PRINCIPLES.md');
+  assert.match(principles, /Lenguaje humano/);
+  assert.match(principles, /Recuperación clara/);
+  assert.match(principles, /Accesibilidad/);
 });
