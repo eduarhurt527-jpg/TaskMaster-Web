@@ -11,6 +11,9 @@ test('el backend principal aplica sesión segura, bcrypt, CORS y límites', asyn
   assert.match(server, /allowedOrigins\.includes/);
   assert.match(server, /rateLimit\(/);
   assert.match(server, /hashSessionToken\(token\)/);
+  assert.match(server, /sessionCookie\(token, Math\.floor\(SESSION_TTL_MS \/ 1000\)\)/);
+  assert.match(server, /app\.set\('trust proxy', 1\)/);
+  assert.match(server, /FIREBASE_SERVICE_ACCOUNT_BASE64/);
 });
 
 test('OAuth usa state, PKCE S256, tokens cifrados y revocación', async () => {
