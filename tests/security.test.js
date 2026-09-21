@@ -95,3 +95,19 @@ test('la sesión se restaura antes del primer render y la cabecera no se superpo
   assert.doesNotMatch(headerActions, /position:\s*absolute/);
   assert.match(headerActions, /flex-wrap:\s*wrap/);
 });
+
+
+test('la portada no solicita permisos y la salida limpia estados privados', async () => {
+  const app = await read('../assets/js/app.js');
+  const constructor = app.match(/constructor\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.doesNotMatch(constructor, /this\._solicitarPermisoNotificaciones\(\)/);
+  assert.match(app, /if \(this\.accessMode !== 'authenticated'\) this\.integrationView\?\._reset\(\)/);
+});
+
+test('el estado de integraciones valida tokens cifrados y responde con error controlado', async () => {
+  const server = await read('../server.js');
+  const statusRoute = server.match(/app\.get\('\/api\/integrations\/status'[\s\S]*?\n\}\);/)?.[0] || '';
+  assert.match(statusRoute, /readIntegration\(req\.user\.id, 'google'\)/);
+  assert.match(statusRoute, /INTEGRATION STATUS ERROR/);
+  assert.match(statusRoute, /res\.status\(500\)\.json/);
+});
