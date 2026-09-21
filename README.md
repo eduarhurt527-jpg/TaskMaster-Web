@@ -20,7 +20,7 @@ Sistema web para gestión de tareas académicas.
 2. Ejecuta `npm install`.
 3. Crea un proyecto en [Firebase Console](https://console.firebase.google.com/) (o usa uno existente) y habilita **Firestore**.
 4. Genera una clave de cuenta de servicio: *Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada*. Se descargará un archivo `.json`.
-5. Copia `.env.example` a `.env` y, si guardaste la clave con otro nombre o ruta, actualiza `FIREBASE_SERVICE_ACCOUNT_PATH`. Por defecto se espera el archivo `serviceAccountKey.json` en la raíz del proyecto (este archivo nunca debe subirse a git; ya está en `.gitignore`).
+5. Copia `.env.example` a `.env` y, si guardaste la clave con otro nombre o ruta, actualiza `FIREBASE_SERVICE_ACCOUNT_PATH`. Por defecto se espera el archivo `serviceAccountKey.json` en la raíz del proyecto (este archivo nunca debe subirse a git; ya está en `.gitignore`). En Hostinger configura `FIREBASE_SERVICE_ACCOUNT_BASE64` para evitar desplegar ese archivo privado.
 6. Inicia el servidor con `npm start`.
 7. Abre `http://localhost:3000/`.
 
@@ -85,6 +85,18 @@ en `docs/UX-RESEARCH.md` y `docs/ASSET-SOURCES.md`.
 
 Para producción, configura `NODE_ENV=production`, utiliza HTTPS y define `CORS_ORIGIN`
 con el dominio exacto de la aplicación.
+
+### Variables para Hostinger
+
+- `NODE_ENV=production`
+- `CORS_ORIGIN=https://tu-dominio`
+- `FIREBASE_SERVICE_ACCOUNT_BASE64` con el JSON de Firebase codificado en base64
+- URLs OAuth con el mismo dominio HTTPS para Google, YouTube y Microsoft
+- `INTEGRATION_TOKEN_KEY` base64 de 32 bytes
+
+El servidor utiliza el puerto proporcionado por `PORT`, confía en un único proxy en
+producción y mantiene la cookie `tm_session` durante los mismos siete días que la sesión
+guardada en Firestore.
 
 ### Configurar el inicio de sesión real con Google
 
