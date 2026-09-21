@@ -21,6 +21,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Hostinger publica la aplicación detrás de un proxy HTTPS.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map(origin => origin.trim())
@@ -79,11 +82,13 @@ const serviceAccountPath = path.resolve(
 
 let serviceAccount;
 try {
-  serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
+  serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
+    ? JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'))
+    : JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
 } catch (err) {
-  console.error('❌ No se pudo leer la credencial de Firebase en:', serviceAccountPath);
+  console.error('❌ No se pudo leer la credencial de Firebase.');
   console.error('   Descarga tu clave de servicio desde Firebase Console → Configuración del proyecto → Cuentas de servicio,');
-  console.error('   guárdala en la ruta anterior (o define FIREBASE_SERVICE_ACCOUNT_PATH en un archivo .env) y vuelve a iniciar el servidor.');
+  console.error('   define FIREBASE_SERVICE_ACCOUNT_BASE64 o usa FIREBASE_SERVICE_ACCOUNT_PATH y vuelve a iniciar el servidor.');
   console.error('   Detalle:', err.message);
   process.exit(1);
 }
@@ -94,7 +99,7 @@ try {
     credential: cert(serviceAccount),
   });
 } catch (err) {
-  console.error('❌ La credencial de Firebase en', serviceAccountPath, 'no es válida.');
+  console.error('❌ La credencial de Firebase no es válida.');
   console.error('   Verifica que el archivo JSON descargado de Firebase no haya sido modificado.');
   console.error('   Detalle:', err.message);
   process.exit(1);
@@ -203,7 +208,10 @@ async function createSession(res, user, additionalCookies = []) {
     created_at: new Date().toISOString(),
     expires_at: Date.now() + SESSION_TTL_MS,
   });
-  res.setHeader('Set-Cookie', [...additionalCookies, sessionCookie(token)]);
+  res.setHeader('Set-Cookie', [
+    ...additionalCookies,
+    sessionCookie(token, Math.floor(SESSION_TTL_MS / 1000)),
+  ]);
 }
 
 async function revokeSession(req) {
