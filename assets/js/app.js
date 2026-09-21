@@ -28,7 +28,8 @@ class App {
     this._taskExpirationNotified = new Set();
     this._bindGlobalEvents();
     this._subscribirViewModel();
-    this._solicitarPermisoNotificaciones();
+    // El permiso de notificaciones se solicita al entrar al espacio de trabajo,
+    // después de una acción explícita, no al abrir la portada pública.
     this._iniciar();
     this._startTaskTimers();
   }
@@ -294,6 +295,7 @@ class App {
       sessionStorage.removeItem('tm_access_mode');
     }
     this._applyAccessState();
+    if (this.accessMode !== 'authenticated') this.integrationView?._reset();
     const el = document.getElementById('header-welcome');
     if (el) el.textContent = user && user.nombre ? `Hola, ${user.nombre}` : 'Bienvenido';
 
@@ -325,6 +327,7 @@ class App {
     this._applyAccessState();
     await taskViewModel.cargarTareas();
     this.homeView.render();
+    this._solicitarPermisoNotificaciones();
     this.showToast('Estás usando TaskMaster como invitado', 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -354,6 +357,7 @@ class App {
     url.searchParams.set('workspace', '1');
     window.history.replaceState({}, '', url.pathname + `?${url.searchParams.toString()}`);
     this._applyAccessState();
+    this._solicitarPermisoNotificaciones();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
