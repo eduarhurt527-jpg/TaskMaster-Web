@@ -19,7 +19,7 @@ test('OAuth usa state, PKCE S256, tokens cifrados y revocación', async () => {
   assert.match(server, /code_verifier: snap\.data\(\)\.code_verifier/);
   assert.match(server, /createCipheriv\('aes-256-gcm'/);
   assert.match(server, /revokeToken\(token\)/);
-  assert.match(server, /integrationRef\(req\.user\.id, req\.params\.provider\)\.delete/);
+  assert.match(server, /integrationRef\(req\.user\.id, provider\)\.delete/);
   assert.match(server, /\/api\/integrations\/youtube\/start/);
   assert.match(server, /\/api\/integrations\/youtube\/callback/);
   const googleScopes = server.match(/app\.get\('\/api\/integrations\/google\/start'[\s\S]*?res\.redirect\(url\);/)?.[0] || '';
@@ -56,19 +56,19 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   for (const id of ['drive-status', 'classroom-status', 'youtube-status', 'teams-status']) {
     assert.match(index, new RegExp(`id="${id}"`));
   }
-  assert.match(integrationView, /_renderService\('drive', data\.google\)/);
+  assert.match(integrationView, /_renderService\('drive', Boolean\(data\.google\)\)/);
   assert.match(index, /https:\/\/drive\.google\.com\/drive\/my-drive/);
   assert.match(index, /https:\/\/classroom\.google\.com\//);
   assert.match(index, /https:\/\/mail\.google\.com\//);
   assert.match(index, /https:\/\/teams\.microsoft\.com\//);
   assert.match(index, /id="gmail-compose"/);
   assert.match(integrationView, /google\/gmail\/send/);
-  assert.match(integrationView, /_renderService\('gmail', data\.google\)/);
-  assert.match(integrationView, /_render\('youtube', data\.youtube\)/);
+  assert.match(integrationView, /_renderService\('gmail', Boolean\(data\.google\)\)/);
+  assert.match(integrationView, /_render\('youtube', Boolean\(data\.youtube\)\)/);
   assert.match(index, /id="connect-youtube"/);
   assert.match(index, /Cómo funcionan las integraciones/);
   assert.match(index, /aria-live="polite"/);
-  assert.match(integrationView, /Abriendo \$\{providerName\}/);
+  assert.match(integrationView, /Abriendo \$\{this\._providerName\(provider\)\}/);
   assert.match(authView, /params\.has\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);
