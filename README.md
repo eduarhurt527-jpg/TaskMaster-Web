@@ -26,13 +26,15 @@ Sistema web para gestión de tareas académicas.
 
 Si `serviceAccountKey.json` falta o es inválido, el servidor lo indica claramente en consola y no arranca, en vez de fallar con un error críptico.
 
-### Módulo de integraciones (opcional)
+### Integraciones (opcionales)
 
-`integraciones/` es un microservicio Express aparte para notificaciones por correo (Brevo),
-calendario, Drive/OneDrive y Classroom/Teams.
+`server.js` es el único backend activo. Expone autenticación, tareas y las rutas protegidas
+de Google Workspace, YouTube y Microsoft 365 bajo el mismo origen. La carpeta
+`integraciones/` conserva módulos históricos de referencia y no debe iniciarse como un
+segundo servidor.
 
-1. `cd integraciones && npm install`
-2. Completa también las credenciales OAuth descritas en `.env.example`.
+1. Completa las credenciales OAuth descritas en `.env.example`.
+2. Genera `INTEGRATION_TOKEN_KEY` y mantenla fuera del repositorio.
 3. Ejecuta `npm start` únicamente desde la raíz.
 
 ## Estructura relevante
@@ -120,7 +122,7 @@ levantar accidentalmente un segundo backend.
   `drive.file` y `youtube.upload` juntos. Configura `YOUTUBE_INTEGRATION_REDIRECT_URI` y registra
   esa URI en el mismo cliente web de Google Cloud.
 - Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
-- La interfaz permite desconectar cada proveedor y borrar sus tokens almacenados.
+- La interfaz permite reconectar o desconectar cada proveedor. Google y YouTube intentan revocar el token remoto antes de borrar la copia cifrada; Microsoft elimina el refresh token cifrado para impedir nuevas renovaciones.
 
 Antes de iniciar el microservicio genera su clave de cifrado:
 
@@ -128,7 +130,7 @@ Antes de iniciar el microservicio genera su clave de cifrado:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Copia el resultado en `integraciones/.env` como `OAUTH_TOKEN_ENCRYPTION_KEY`. Mantén esa
+Copia el resultado en el `.env` de la raíz como `INTEGRATION_TOKEN_KEY`. Mantén esa
 clave fuera de Git y respaldada en un gestor de secretos: si se pierde, los tokens existentes
 no podrán descifrarse y cada usuario deberá volver a conectar sus cuentas.
 
