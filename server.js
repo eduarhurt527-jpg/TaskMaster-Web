@@ -687,12 +687,25 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 
 // ── Integraciones OAuth y archivos ──────────────────────────────────────
 app.get('/api/integrations/status', requireAuth, async (req, res) => {
-  const [googleDoc, youtubeDoc, microsoftDoc] = await Promise.all([
-    integrationRef(req.user.id, 'google').get(),
-    integrationRef(req.user.id, 'youtube').get(),
-    integrationRef(req.user.id, 'microsoft').get(),
-  ]);
-  res.json({ success: true, google: googleDoc.exists, youtube: youtubeDoc.exists, microsoft: microsoftDoc.exists });
+  try {
+    const [google, youtube, microsoft] = await Promise.all([
+      readIntegration(req.user.id, 'google'),
+      readIntegration(req.user.id, 'youtube'),
+      readIntegration(req.user.id, 'microsoft'),
+    ]);
+    res.json({
+      success: true,
+      google: Boolean(google),
+      youtube: Boolean(youtube),
+      microsoft: Boolean(microsoft),
+    });
+  } catch (error) {
+    console.error('INTEGRATION STATUS ERROR:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'No se pudieron validar las conexiones guardadas. Vuelve a vincularlas.',
+    });
+  }
 });
 
 app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
@@ -793,15 +806,36 @@ app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) =>
 });
 
 app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, async (req, res) => {
-  if (!['google', 'youtube', 'microsoft'].includes(req.params.provider)) return res.status(400).json({ success: false, error: 'No reconocemos el servicio que intentas desconectar.' });
-  if (['google', 'youtube'].includes(req.params.provider)) {
-    const tokens = await readIntegration(req.user.id, req.params.provider);
-    const token = tokens?.refresh_token || tokens?.access_token;
-    const client = req.params.provider === 'youtube' ? youtubeIntegrationClient(tokens) : googleIntegrationClient(tokens);
-    if (token) await client.revokeToken(token).catch(error => console.warn('GOOGLE TOKEN REVOCATION:', error.message));
+  const provider = req.params.provider;
+  if (!['google', 'youtube', 'microsoft'].includes(provider)) {
+    return res.status(400).json({ success: false, error: 'No reconocemos el servicio que intentas desconectar.' });
   }
-  await integrationRef(req.user.id, req.params.provider).delete();
-  res.json({ success: true });
+
+  try {
+    if (['google', 'youtube'].includes(provider)) {
+      const tokens = await readIntegration(req.user.id, provider);
+      const token = tokens?.refresh_token || tokens?.access_token;
+      const client = provider === 'youtube'
+        ? youtubeIntegrationClient(tokens)
+        : googleIntegrationClient(tokens);
+      if (token) {
+        await client.revokeToken(token).catch(error => {
+          console.warn('GOOGLE TOKEN REVOCATION:', error.message);
+        });
+      }
+    }
+
+    // Microsoft no ofrece un endpoint universal de revocación para este flujo.
+    // Borrar el refresh token cifrado impide que TaskMaster solicite nuevos accesos.
+    await integrationRef(req.user.id, provider).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('INTEGRATION DISCONNECT ERROR:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'No se pudo desconectar el servicio. Inténtalo nuevamente.',
+    });
+  }
 });
 
 app.get('/api/integrations/google/calendar/events', requireAuth, async (req, res) => {
