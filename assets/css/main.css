@@ -27,7 +27,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -1928,4 +1928,42 @@ section[id] { scroll-margin-top: 88px; }
   .how-card { min-height: 180px; }
   .product-story { grid-template-columns:1fr; padding:38px 22px; }
   .product-story__media { width:min(88%,320px); }
+}
+
+
+/* Acciones de conexión: evita superposición y mantiene controles táctiles claros. */
+.integration-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.integration-card__actions .btn {
+  min-height: 44px;
+}
+
+.integration-disconnect {
+  color: var(--urgente);
+  border-color: rgba(234, 67, 53, 0.32);
+}
+
+.integration-disconnect:hover {
+  background: rgba(234, 67, 53, 0.08);
+  border-color: var(--urgente);
+}
+
+button[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .integration-card__actions {
+    width: 100%;
+  }
+
+  .integration-card__actions .btn {
+    flex: 1 1 100%;
+  }
 }
