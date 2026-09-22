@@ -141,7 +141,7 @@ class ModalView {
         if (resultado.success) {
           // Enviar notificación por email si el usuario está logueado y solicitó aviso
           try {
-            const user = localStorage.getItem('tm_user') ? JSON.parse(localStorage.getItem('tm_user')) : null;
+            const user = sessionStorage.getItem('tm_user') ? JSON.parse(sessionStorage.getItem('tm_user')) : null;
             if (user && user.email) {
               await fetch('api/notify', {
                 method: 'POST',
