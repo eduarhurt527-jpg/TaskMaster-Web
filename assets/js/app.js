@@ -295,7 +295,8 @@ class App {
     this._applyAccessState();
     if (this.accessMode !== 'authenticated') this.integrationView?._reset();
     const el = document.getElementById('header-welcome');
-    if (el) el.textContent = user && user.nombre ? `Hola, ${user.nombre}` : 'Bienvenido';
+    if (el) el.textContent = user && user.nombre ? `${this.preferences.values.language === 'en' ? 'Hello' : 'Hola'}, ${user.nombre}` :
+      (this.preferences.values.language === 'en' ? 'Welcome' : 'Bienvenido');
 
     const loggedIn = ['btn-login', 'btn-registrarse', 'btn-google-login'];
     loggedIn.forEach(id => {
@@ -366,7 +367,9 @@ class App {
     document.body.dataset.screen = this.screen;
     const badge = document.getElementById('access-badge');
     if (badge) {
-      badge.textContent = this.accessMode === 'guest' ? 'Modo invitado' : 'Cuenta sincronizada';
+      badge.textContent = this.accessMode === 'guest' ?
+        (this.preferences.values.language === 'en' ? 'Guest mode' : 'Modo invitado') :
+        (this.preferences.values.language === 'en' ? 'Synced account' : 'Cuenta sincronizada');
       badge.className = `access-badge access-badge--${this.accessMode}`;
     }
     document.querySelectorAll('[data-auth-only]').forEach(el => {

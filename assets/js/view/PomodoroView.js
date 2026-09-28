@@ -24,6 +24,7 @@ class PomodoroView {
     this._restantes  = this._duracion;
     this._intervalo  = null;
     this._corriendo  = false;
+    this._fase = 'focus';
     this._sesionAct  = 0;
     this._sesionTotal= 1;
     this._tareaId    = null;
@@ -62,7 +63,7 @@ class PomodoroView {
     this._corriendo = true;
     this.$btnToggle.textContent = '⏸';
     this.$btnToggle.classList.add('running');
-    this.$label.textContent = 'Enfocado';
+    this.$label.textContent = this._fase === 'break' ? '☕ Descanso' : 'Enfocado';
 
     this._intervalo = setInterval(() => {
       this._restantes--;
@@ -85,6 +86,7 @@ class PomodoroView {
   reset() {
     clearInterval(this._intervalo);
     this._corriendo  = false;
+    this._fase = 'focus';
     this._duracion = (window.app?.preferences?.values.focus || 25) * 60;
     this._duracionActual = this._duracion;
     this._restantes  = this._duracion;
@@ -99,6 +101,12 @@ class PomodoroView {
     this._corriendo = false;
     this.$btnToggle.classList.remove('running');
 
+    if (this._fase === 'break') {
+      this.reset();
+      app.showToast('Descanso terminado. Ya puedes iniciar otra sesión.', 'info');
+      return;
+    }
+
     // Registrar en el ViewModel
     if (this._tareaId) {
       await this._vm.registrarPomodoro(this._tareaId);
@@ -106,9 +114,10 @@ class PomodoroView {
     }
 
     // Notificación del navegador
-    this._notificar('🍅 ¡Sesión completada!', 'Toma un descanso de 5 minutos.');
+    this._notificar('🍅 ¡Sesión completada!', `Toma un descanso de ${window.app?.preferences?.values.break || 5} minutos.`);
 
     // Mostrar descanso
+    this._fase = 'break';
     this._duracionActual = (window.app?.preferences?.values.break || 5) * 60;
     this._restantes = this._duracionActual;
     this.$label.textContent = '☕ Descanso';

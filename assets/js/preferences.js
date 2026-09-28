@@ -13,7 +13,7 @@ class Preferences {
       timerHelp: 'New durations take effect when the timer resets.', alerts: 'Task reminders and notifications',
       alertsHelp: 'Your browser may request permission to show timer notifications.', privacy: 'Session privacy',
       privacyHelp: 'Sign out when finished, especially on a shared device. Preferences are saved in this browser.',
-      publicPage: 'View public page'
+      publicPage: 'Sign out and view public page'
     };
     this.ui = {
       'Inicio': 'Home', 'Mi Panel': 'My dashboard', 'Mi panel': 'My dashboard', 'Mis tareas': 'My tasks',
@@ -67,11 +67,19 @@ class Preferences {
       el.textContent = v.language === 'en' ? this.translations[el.dataset.i18n] || this.originals.get(el) : this.originals.get(el);
     });
     // Textos de navegación y títulos conocidos; no se recorren tareas ni contenido del usuario.
-    document.querySelectorAll('.sidebar-link b, .header-nav button, .public-nav a, .header-summary .stat-label, #access-badge, #header-welcome, .contact-section h2, .contact-section p, .contact-section h3, .contact-section a, .dashboard-header h2, .dashboard-card h3').forEach(el => {
+    document.querySelectorAll('.sidebar-link b, .header-nav button, .public-nav a, .header-summary .stat-label, .contact-section h2, .contact-section p, .contact-section h3, .contact-section a, .dashboard-header h2, .dashboard-card h3').forEach(el => {
       const current = el.textContent.trim();
       if (!this.originals.has(el) && this.ui[current]) this.originals.set(el, current);
       const original = this.originals.get(el);
       if (original) el.textContent = v.language === 'en' ? this.ui[original] || original : original;
     });
+    if (window.app) {
+      const badge = document.getElementById('access-badge');
+      if (badge) badge.textContent = window.app.accessMode === 'guest' ?
+        (v.language === 'en' ? 'Guest mode' : 'Modo invitado') : (v.language === 'en' ? 'Synced account' : 'Cuenta sincronizada');
+      const welcome = document.getElementById('header-welcome');
+      if (welcome) welcome.textContent = window.app.user?.nombre ?
+        `${v.language === 'en' ? 'Hello' : 'Hola'}, ${window.app.user.nombre}` : (v.language === 'en' ? 'Welcome' : 'Bienvenido');
+    }
   }
 }
