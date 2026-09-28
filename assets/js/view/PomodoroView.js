@@ -19,7 +19,7 @@ class PomodoroView {
     this.$btnSkip  = document.getElementById('btn-pom-skip');
 
     // Estado interno del timer
-    this._duracion   = 25 * 60; // 25 min en segundos
+    this._duracion   = (window.app?.preferences?.values.focus || 25) * 60;
     this._duracionActual = this._duracion; // duración de la fase en curso (enfoque o descanso)
     this._restantes  = this._duracion;
     this._intervalo  = null;
@@ -85,6 +85,7 @@ class PomodoroView {
   reset() {
     clearInterval(this._intervalo);
     this._corriendo  = false;
+    this._duracion = (window.app?.preferences?.values.focus || 25) * 60;
     this._duracionActual = this._duracion;
     this._restantes  = this._duracion;
     this.$btnToggle.textContent = '▶';
@@ -108,7 +109,7 @@ class PomodoroView {
     this._notificar('🍅 ¡Sesión completada!', 'Toma un descanso de 5 minutos.');
 
     // Mostrar descanso
-    this._duracionActual = 5 * 60;
+    this._duracionActual = (window.app?.preferences?.values.break || 5) * 60;
     this._restantes = this._duracionActual;
     this.$label.textContent = '☕ Descanso';
     this.$btnToggle.textContent = '▶';
@@ -151,6 +152,7 @@ class PomodoroView {
   // ── Notificación del navegador ────────────────────────────────────────────
 
   _notificar(titulo, cuerpo) {
+    if (!window.app?.preferences?.values.alerts) return;
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') {
       new Notification(titulo, { body: cuerpo, icon: '🍅' });

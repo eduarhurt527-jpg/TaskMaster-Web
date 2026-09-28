@@ -7,6 +7,7 @@
 class App {
 
   constructor() {
+    this.preferences = new Preferences();
     // Elimina el perfil que versiones anteriores dejaban permanentemente en el navegador.
     localStorage.removeItem('tm_user');
     localStorage.removeItem('tm_access_mode');
@@ -97,6 +98,7 @@ class App {
   }
 
   _maybeNotifyExpiration(tarea, diff) {
+    if (!this.preferences.values.alerts) return;
     if (tarea.completada || diff <= 0) return;
 
     const key = `${tarea.id}-${tarea.prioridad}`;
@@ -113,6 +115,7 @@ class App {
   }
 
   _checkDueWarnings() {
+    if (!this.preferences.values.alerts) return;
     const tareas = taskViewModel.getTareas().filter(t => t.fecha_limite && !t.completada);
     const now = new Date();
     tareas.forEach(t => {
@@ -250,11 +253,6 @@ class App {
       this._cambiarVista('overview');
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const nav = document.querySelector('.nav-btn[data-view="overview"]'); if (nav) nav.classList.add('active');
-    });
-    const contactForm = document.getElementById('contact-form');
-    if (contactForm) contactForm.addEventListener('submit', event => {
-      event.preventDefault();
-      this.showToast('Formulario listo para conectar con el canal de contacto.', 'info');
     });
     const year = document.getElementById('current-year');
     if (year) year.textContent = String(new Date().getFullYear());
@@ -405,6 +403,7 @@ class App {
   // ── Notificaciones del navegador ──────────────────────────────────────────
 
   _solicitarPermisoNotificaciones() {
+    if (!this.preferences.values.alerts) return;
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
