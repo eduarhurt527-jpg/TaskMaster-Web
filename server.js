@@ -29,15 +29,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .map(origin => origin.trim())
   .filter(Boolean);
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.length === 0) return callback(null, false);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origen no permitido por CORS'));
-  },
-  credentials: true,
-}));
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  const ownOrigin = `${req.protocol}://${req.get('host')}`;
+  if (origin && origin !== ownOrigin && !allowedOrigins.includes(origin)) {
+    return res.status(403).json({ success: false, error: 'Esta solicitud no está permitida desde ese sitio.' });
+  }
+  cors({ origin: origin || false, credentials: true })(req, res, next);
+});
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -252,6 +251,18 @@ async function requireAuth(req, res, next) {
   } catch (error) {
     console.error('SESSION ERROR:', error.message);
     res.status(500).json({ success: false, error: 'No se pudo validar la sesión.' });
+  }
+}
+
+async function requireIntegrationCallbackAuth(req, res, next) {
+  try {
+    const user = await readSession(req);
+    if (!user) return res.redirect('/?integration_error=session');
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('INTEGRATION CALLBACK SESSION ERROR:', error.message);
+    res.redirect('/?integration_error=session');
   }
 }
 
@@ -758,7 +769,7 @@ app.get('/api/integrations/youtube/start', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/integrations/youtube/callback', requireAuth, async (req, res) => {
+app.get('/api/integrations/youtube/callback', requireIntegrationCallbackAuth, async (req, res) => {
   try {
     const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
     const snap = await ref.get();
@@ -773,7 +784,7 @@ app.get('/api/integrations/youtube/callback', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
+app.get('/api/integrations/google/callback', requireIntegrationCallbackAuth, async (req, res) => {
   try {
     const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
     const snap = await ref.get();
@@ -798,7 +809,7 @@ app.get('/api/integrations/microsoft/start', requireAuth, async (req, res) => {
   } catch (error) { res.redirect('/?integration_error=microsoft_config'); }
 });
 
-app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) => {
+app.get('/api/integrations/microsoft/callback', requireIntegrationCallbackAuth, async (req, res) => {
   try {
     const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
     const snap = await ref.get();
