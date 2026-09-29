@@ -206,6 +206,8 @@ class AuthView {
       this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
     } else if (params.get('auth_error') === 'google') {
       this.app.showToast('Google no pudo verificar el inicio de sesión', 'error');
+    } else if (params.get('integration_error') === 'session') {
+      this.app.showToast('Tu sesión terminó durante la conexión. Inicia sesión y vuelve a intentarlo.', 'error');
     } else if (params.get('integration_error')) {
       this.app.showToast('No se pudo completar la conexión de la integración', 'error');
     } else {
