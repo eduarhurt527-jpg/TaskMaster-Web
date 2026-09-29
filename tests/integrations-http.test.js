@@ -43,8 +43,7 @@ test('las integraciones rechazan peticiones sin sesión y orígenes ajenos', { t
 
   const privatePaths = [
     '/api/integrations/status', '/api/integrations/google/start',
-    '/api/integrations/google/callback?state=falso&code=falso',
-    '/api/integrations/microsoft/start', '/api/integrations/microsoft/callback?state=falso&code=falso',
+    '/api/integrations/microsoft/start',
     '/api/integrations/google/calendar/events', '/api/integrations/google/classroom/courses',
     '/api/integrations/microsoft/teams',
   ];
@@ -52,6 +51,11 @@ test('las integraciones rechazan peticiones sin sesión y orígenes ajenos', { t
     const response = await fetch(`${base}${path}`, { redirect: 'manual' });
     assert.equal(response.status, 401, path);
     assert.equal((await response.json()).success, false, path);
+  }
+  for (const provider of ['google', 'microsoft', 'youtube']) {
+    const response = await fetch(`${base}/api/integrations/${provider}/callback?state=falso&code=falso`, { redirect: 'manual' });
+    assert.equal(response.status, 302, provider);
+    assert.equal(response.headers.get('location'), '/?integration_error=session', provider);
   }
   for (const [method, path] of [
     ['DELETE', '/api/integrations/google'],
@@ -65,6 +69,6 @@ test('las integraciones rechazan peticiones sin sesión y orígenes ajenos', { t
     method: 'POST', headers: { Origin: 'https://sitio-ajeno.example', 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: 'test@example.com' }),
   });
-  assert.ok([403, 500].includes(crossOrigin.status), 'CORS debe bloquear el origen');
+  assert.equal(crossOrigin.status, 403, 'CORS debe bloquear el origen sin devolver un error 500');
   assert.notEqual(crossOrigin.headers.get('access-control-allow-origin'), 'https://sitio-ajeno.example');
 });
