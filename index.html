@@ -360,15 +360,9 @@
         <div>
           <p class="section-label">CONTACTO</p>
           <h2>¿Tienes una pregunta sobre TaskMaster?</h2>
-          <p>Cuéntanos cómo podemos ayudarte. La información de contacto puede configurarse antes de publicar el proyecto.</p>
+          <p>¿Encontraste un problema o tienes una idea? Envíanos tu consulta desde el repositorio del proyecto.</p>
         </div>
-        <form class="contact-card" id="contact-form">
-          <label>Nombre<input type="text" required maxlength="100" placeholder="Tu nombre" /></label>
-          <label>Correo<input type="email" required maxlength="254" placeholder="correo@ejemplo.com" /></label>
-          <label>Mensaje<textarea required rows="4" maxlength="1000" placeholder="Escribe tu consulta"></textarea></label>
-          <button class="btn btn--primary" type="submit">Preparar mensaje</button>
-          <small>No almacenamos este mensaje hasta configurar un servicio de contacto.</small>
-        </form>
+        <div class="contact-card"><h3>Contacto y sugerencias</h3><p>Describe tu consulta para que el equipo pueda revisarla.</p><a class="btn btn--primary" href="https://github.com/eduarhurt527-jpg/TaskMaster-Web/issues/new" target="_blank" rel="noopener noreferrer">Abrir una consulta ↗</a></div>
       </section>
     </section>
 
@@ -463,8 +457,23 @@
     </section>
 
     <section id="view-settings" class="view workspace-page">
-      <div class="workspace-page__heading"><div><p class="section-label">PREFERENCIAS</p><h2>Configuración</h2><p>La identidad y los tokens se administran de forma segura durante la sesión. Ninguna contraseña se guarda en el navegador.</p></div></div>
-      <div class="settings-card"><h3>Privacidad de la sesión</h3><p>Cierra sesión cuando termines, especialmente si utilizas un equipo compartido.</p><button class="btn btn--ghost" data-action="public">Ver página pública</button></div>
+      <div class="workspace-page__heading"><div><p class="section-label" data-i18n="preferences">PREFERENCIAS</p><h2 data-i18n="settings">Configuración</h2><p data-i18n="settingsIntro">Personaliza TaskMaster para trabajar a tu manera.</p></div></div>
+      <div class="settings-grid">
+        <section class="settings-card"><h3 data-i18n="appearance">Apariencia e idioma</h3>
+          <label class="settings-field"><span data-i18n="theme">Tema</span><select id="setting-theme"><option value="system" data-i18n="system">Automático (sistema)</option><option value="light" data-i18n="light">Claro</option><option value="dark" data-i18n="dark">Oscuro</option></select></label>
+          <label class="settings-field"><span data-i18n="language">Idioma</span><select id="setting-language"><option value="es">Español</option><option value="en">English</option></select></label>
+          <label class="settings-field"><span data-i18n="density">Densidad</span><select id="setting-density"><option value="comfortable" data-i18n="comfortable">Cómoda</option><option value="compact" data-i18n="compact">Compacta</option></select></label>
+          <label class="settings-switch"><input type="checkbox" id="setting-motion"><span data-i18n="motion">Reducir animaciones</span></label>
+        </section>
+        <section class="settings-card"><h3 data-i18n="focus">Enfoque y avisos</h3>
+          <label class="settings-field"><span data-i18n="focusMinutes">Duración de enfoque</span><select id="setting-focus"><option value="15">15 min</option><option value="25">25 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
+          <label class="settings-field"><span data-i18n="breakMinutes">Duración de descanso</span><select id="setting-break"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option></select></label>
+          <p class="settings-help" data-i18n="timerHelp">La duración nueva se aplica al reiniciar el temporizador.</p>
+          <label class="settings-switch"><input type="checkbox" id="setting-alerts"><span data-i18n="alerts">Avisos de tareas y notificaciones</span></label>
+          <p class="settings-help" data-i18n="alertsHelp">El navegador puede pedir permiso para mostrar avisos del temporizador.</p>
+        </section>
+      </div>
+      <div class="settings-card"><h3 data-i18n="privacy">Privacidad de la sesión</h3><p data-i18n="privacyHelp">Cierra sesión cuando termines, especialmente si utilizas un equipo compartido. Tus preferencias se guardan en este navegador.</p><button class="btn btn--ghost" data-action="public" data-i18n="publicPage">Cerrar sesión y ver página pública</button></div>
     </section>
 
   </main>
@@ -689,6 +698,7 @@
   <script src="assets/js/view/RecordingView.js?v=20260913-3"></script>
   <script src="assets/js/view/FileWorkspaceView.js?v=20260913-4"></script>
   <script src="assets/js/view/IntegrationView.js?v=20260921-1"></script>
+  <script src="assets/js/preferences.js?v=20260928-1"></script>
   <script src="assets/js/app.js?v=20260913-8"></script>
 </body>
 </html>

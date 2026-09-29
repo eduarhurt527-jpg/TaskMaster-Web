@@ -7,6 +7,7 @@
 class App {
 
   constructor() {
+    this.preferences = new Preferences();
     // Elimina el perfil que versiones anteriores dejaban permanentemente en el navegador.
     localStorage.removeItem('tm_user');
     localStorage.removeItem('tm_access_mode');
@@ -97,6 +98,7 @@ class App {
   }
 
   _maybeNotifyExpiration(tarea, diff) {
+    if (!this.preferences.values.alerts) return;
     if (tarea.completada || diff <= 0) return;
 
     const key = `${tarea.id}-${tarea.prioridad}`;
@@ -113,6 +115,7 @@ class App {
   }
 
   _checkDueWarnings() {
+    if (!this.preferences.values.alerts) return;
     const tareas = taskViewModel.getTareas().filter(t => t.fecha_limite && !t.completada);
     const now = new Date();
     tareas.forEach(t => {
@@ -251,11 +254,6 @@ class App {
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const nav = document.querySelector('.nav-btn[data-view="overview"]'); if (nav) nav.classList.add('active');
     });
-    const contactForm = document.getElementById('contact-form');
-    if (contactForm) contactForm.addEventListener('submit', event => {
-      event.preventDefault();
-      this.showToast('Formulario listo para conectar con el canal de contacto.', 'info');
-    });
     const year = document.getElementById('current-year');
     if (year) year.textContent = String(new Date().getFullYear());
 
@@ -297,7 +295,8 @@ class App {
     this._applyAccessState();
     if (this.accessMode !== 'authenticated') this.integrationView?._reset();
     const el = document.getElementById('header-welcome');
-    if (el) el.textContent = user && user.nombre ? `Hola, ${user.nombre}` : 'Bienvenido';
+    if (el) el.textContent = user && user.nombre ? `${this.preferences.values.language === 'en' ? 'Hello' : 'Hola'}, ${user.nombre}` :
+      (this.preferences.values.language === 'en' ? 'Welcome' : 'Bienvenido');
 
     const loggedIn = ['btn-login', 'btn-registrarse', 'btn-google-login'];
     loggedIn.forEach(id => {
@@ -335,6 +334,8 @@ class App {
   showPublic() {
     this.recordingView?.cleanupStream();
     this.screen = 'public';
+    this._cambiarVista('home');
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === 'home'));
     const url = new URL(window.location.href);
     url.searchParams.delete('workspace');
     window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
@@ -368,7 +369,9 @@ class App {
     document.body.dataset.screen = this.screen;
     const badge = document.getElementById('access-badge');
     if (badge) {
-      badge.textContent = this.accessMode === 'guest' ? 'Modo invitado' : 'Cuenta sincronizada';
+      badge.textContent = this.accessMode === 'guest' ?
+        (this.preferences.values.language === 'en' ? 'Guest mode' : 'Modo invitado') :
+        (this.preferences.values.language === 'en' ? 'Synced account' : 'Cuenta sincronizada');
       badge.className = `access-badge access-badge--${this.accessMode}`;
     }
     document.querySelectorAll('[data-auth-only]').forEach(el => {
@@ -405,6 +408,7 @@ class App {
   // ── Notificaciones del navegador ──────────────────────────────────────────
 
   _solicitarPermisoNotificaciones() {
+    if (!this.preferences.values.alerts) return;
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
