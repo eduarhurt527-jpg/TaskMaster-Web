@@ -334,6 +334,8 @@ class App {
   showPublic() {
     this.recordingView?.cleanupStream();
     this.screen = 'public';
+    this._cambiarVista('home');
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === 'home'));
     const url = new URL(window.location.href);
     url.searchParams.delete('workspace');
     window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
