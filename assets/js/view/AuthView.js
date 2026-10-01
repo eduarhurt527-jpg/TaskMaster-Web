@@ -19,7 +19,9 @@ class AuthView {
     this.mode = 'login'; // or 'register'
 
     this._bind();
-    this._restoreUser();
+    // App espera esta promesa antes del primer render. Así la portada y el
+    // espacio privado no se alternan mientras se comprueba la cookie.
+    this.ready = this._restoreUser();
   }
 
   _bind() {
@@ -53,7 +55,7 @@ class AuthView {
     this.open();
   }
 
-  /** Simula login con proveedor (Google). En producción usar OAuth real. */
+  /** Inicia el flujo OAuth real de Google en el backend. */
   openGoogleMode() {
     this.mode = 'google';
     this.$modeLabel.textContent = 'Google';
@@ -70,42 +72,14 @@ class AuthView {
 
   async loginWithProvider(provider) {
     if (provider === 'google') {
-      this.openGoogleMode();
+      window.location.assign('/api/auth/google/start');
     } else {
       this.openMode('login');
     }
   }
 
   async _submitGoogle() {
-    const email = this.$email.value.trim();
-    if (!email) {
-      this.app.showToast('Introduce tu correo', 'error');
-      return;
-    }
-    const nombre = email.split('@')[0];
-    try {
-      const res = await fetch('api/auth?action=google', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, nombre })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const user = { id: data.user.id, nombre: data.user.nombre, email };
-        localStorage.setItem('tm_user', JSON.stringify(user));
-        this.app.setUser(user);
-        if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
-        if (this.app && this.app.homeView) this.app.homeView.render();
-        this.app.showToast('Conectado con Google', 'success');
-        this.close();
-        return;
-      }
-      this.app.showToast(data.error || 'Error Google', 'error');
-    } catch (e) {
-      console.error(e);
-      this.app.showToast('Error de red Google', 'error');
-    }
+    window.location.assign('/api/auth/google/start');
   }
 
   close() {
@@ -120,7 +94,20 @@ class AuthView {
     this.$nombre.style.display = this.mode === 'login' ? 'none' : 'block';
   }
 
+  async _requestAuth(action, payload = {}) {
+    const data = await taskMasterApi.request(`api/auth?action=${action}`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload)
+    }, action === 'login' ? 'login' : 'session');
+    if (action !== 'logout' && (!data.user || data.user.id == null)) {
+      throw new Error('No pudimos confirmar tu sesión. Vuelve a iniciar sesión.');
+    }
+    return data;
+  }
+
   async _submit() {
+    if (this._submitting) return;
     if (this.mode === 'google') {
       return this._submitGoogle();
     }
@@ -133,38 +120,127 @@ class AuthView {
     }
 
     const payload = { nombre, email, password };
-    const url = this.mode === 'login' ? 'api/auth?action=login' : 'api/auth?action=register';
+    const action = this.mode === 'login' ? 'login' : 'register';
+    this._submitting = true;
+    this.$submit.disabled = true;
+    this.$submit.setAttribute('aria-busy', 'true');
     try {
-      const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
+      const data = await this._requestAuth(action, payload);
       if (data.success) {
-        // Guardar usuario localmente
-        const user = { id: data.user_id || (data.user && data.user.id) || null, nombre: nombre || (data.user && data.user.nombre) || email, email };
-        localStorage.setItem('tm_user', JSON.stringify(user));
+        // Mantener la identidad solo durante la sesión de esta pestaña.
+        const user = data.user;
+        sessionStorage.setItem('tm_user', JSON.stringify(user));
         this.app.setUser(user);
+        this.app.enterWorkspace();
         if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
         if (this.app && this.app.homeView) this.app.homeView.render();
+        this.app.integrationView?.refresh();
         this.app.showToast(this.mode === 'login' ? 'Bienvenido' : 'Cuenta creada', 'success');
+        this.$form.reset();
         this.close();
       } else {
         this.app.showToast(data.error || 'Error', 'error');
       }
     } catch (e) {
       console.error(e);
-      this.app.showToast('Error de red', 'error');
+      this.app.showToast(e.message || 'No se pudo conectar con el servidor.', 'error');
+    } finally {
+      this._submitting = false;
+      this.$submit.disabled = false;
+      this.$submit.removeAttribute('aria-busy');
     }
   }
 
-  _restoreUser() {
-    const u = localStorage.getItem('tm_user');
-    if (u) {
-      try { const user = JSON.parse(u); this.app.setUser(user); } catch(e){}
+  async _restoreUser() {
+    const params = new URLSearchParams(window.location.search);
+    // La cookie del servidor determina el acceso, también al abrir la URL raíz.
+    // Visitar la portada no debe revocar una sesión válida.
+    try {
+      const data = await this._requestAuth('session');
+      if (data.user) {
+        sessionStorage.setItem('tm_user', JSON.stringify(data.user));
+        this.app.screen = 'workspace';
+        this.app.setUser(data.user);
+        params.set('workspace', '1');
+        window.history.replaceState({}, '', window.location.pathname + `?${params.toString()}`);
+        this._handleOAuthResult();
+        return;
+      }
+    } catch (e) {
+      console.warn('No se pudo restaurar la sesión:', e.message);
+      this._sessionError = e.message;
+    }
+    sessionStorage.removeItem('tm_user');
+    this.app.setUser(null);
+    if (this.app.accessMode === 'guest' && params.get('workspace') === '1') {
+      this.app.enterWorkspace();
+    } else {
+      params.delete('workspace');
+      const query = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
+    this._handleOAuthResult();
+  }
+
+  _handleOAuthResult() {
+    const params = new URLSearchParams(window.location.search);
+    const integrationReturn = params.has('integration') || params.has('integration_error');
+    if (params.get('login') === 'google') {
+      if (this.app.user && this.app.accessMode === 'authenticated') {
+        this.app.showToast('Sesión iniciada con Google', 'success');
+      } else {
+        this.app.showToast(this._sessionError || 'No se pudo recuperar tu sesión de Google. Vuelve a iniciar sesión.', 'error');
+      }
+    } else if (params.has('integration') && (!this.app.user || this.app.accessMode !== 'authenticated')) {
+      this.app.showToast('Inicia sesión nuevamente para comprobar la conexión del servicio.', 'warning');
+    } else if (params.get('integration') === 'google') {
+      this.app.showToast('Google Workspace conectado', 'success');
+      this.app.integrationView?.refresh();
+    } else if (params.get('integration') === 'microsoft') {
+      this.app.showToast('Microsoft 365 conectado', 'success');
+      this.app.integrationView?.refresh();
+    } else if (params.get('integration') === 'youtube') {
+      this.app.showToast('YouTube conectado', 'success');
+      this.app.integrationView?.refresh();
+    } else if (params.get('auth_error') === 'google_config') {
+      this.app.showToast('El acceso con Google no está disponible en este momento. Puedes usar tu correo y contraseña o volver a intentarlo más tarde.', 'error');
+    } else if (params.get('auth_error') === 'google') {
+      this.app.showToast('No se completó el acceso con Google. Vuelve a intentarlo y completa la autorización.', 'error');
+    } else if (params.get('integration_error')) {
+      const provider = params.get('integration_error').split('_')[0];
+      const name = { google: 'Google Workspace', microsoft: 'Microsoft 365', youtube: 'YouTube' }[provider] || 'el servicio';
+      const message = params.get('integration_error').endsWith('_config')
+        ? `La conexión con ${name} no está disponible en este momento. Puedes abrir su aplicación oficial e intentarlo más tarde.`
+        : `No se completó la conexión con ${name}. Vuelve a vincular tu cuenta y completa la autorización.`;
+      this.app.showToast(message, 'error');
+    } else {
+      return;
+    }
+    params.delete('login');
+    params.delete('auth_error');
+    params.delete('integration');
+    params.delete('integration_error');
+    if (this.app.accessMode === 'authenticated') params.set('workspace', '1');
+    const query = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    if (this.app.accessMode === 'authenticated' && integrationReturn) {
+      // Los regresos de las integraciones deben mostrar sus controles, no la portada.
+      if (this.app._cambiarVista && this.app.integrationView) this.app._cambiarVista('integrations');
     }
   }
 
   async logout() {
-    localStorage.removeItem('tm_user');
+    try {
+      await this._requestAuth('logout');
+    } catch (e) {
+      this.app.showToast(e.message || 'No se pudo cerrar la sesión en el servidor.', 'error');
+      return;
+    }
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_access_mode');
     this.app.setUser(null);
+    this.app.showPublic();
+    this.$form.reset();
     // Recargar tareas sin usuario para no seguir mostrando las de la sesión cerrada
     if (typeof taskViewModel !== 'undefined') await taskViewModel.cargarTareas();
     if (this.app && this.app.homeView) this.app.homeView.render();

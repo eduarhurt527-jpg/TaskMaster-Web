@@ -1,0 +1,30 @@
+name: Security CI
+
+on:
+  push:
+    branches: [main, security/secure-session-auth, security/auth-hardening-sprint]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            integraciones/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix integraciones
+      - run: npm test
+      - run: npm audit --omit=dev
+      - run: npm audit --omit=dev --prefix integraciones
+      - run: node --check server.js
+      - run: find integraciones -name '*.js' -type f -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
