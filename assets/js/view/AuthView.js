@@ -94,6 +94,30 @@ class AuthView {
     this.$nombre.style.display = this.mode === 'login' ? 'none' : 'block';
   }
 
+  async _requestAuth(action, payload = {}) {
+    const response = await fetch(`api/auth?action=${action}`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const ok = response.ok;
+    const raw = await response.text();
+    let data;
+    if ((response.headers.get('content-type') || '').includes('application/json') && raw.trim()) {
+      try { data = JSON.parse(raw); } catch (_) { /* Mensaje controlado debajo. */ }
+    }
+    if (!data || typeof data.success !== 'boolean') {
+      throw Object.assign(new Error(`El servidor no devolvió JSON válido (HTTP ${response.status}).`), { status: response.status });
+    }
+    if (!ok || !data.success) {
+      throw Object.assign(new Error(data.error || `No se pudo completar la solicitud (HTTP ${response.status}).`), { status: response.status });
+    }
+    if (action !== 'logout' && (!data.user || data.user.id == null)) {
+      throw new Error('El servidor no devolvió una sesión válida.');
+    }
+    return data;
+  }
+
   async _submit() {
     if (this.mode === 'google') {
       return this._submitGoogle();
@@ -107,10 +131,9 @@ class AuthView {
     }
 
     const payload = { nombre, email, password };
-    const url = this.mode === 'login' ? 'api/auth?action=login' : 'api/auth?action=register';
+    const action = this.mode === 'login' ? 'login' : 'register';
     try {
-      const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
+      const data = await this._requestAuth(action, payload);
       if (data.success) {
         // Mantener la identidad solo durante la sesión de esta pestaña.
         const user = data.user;
@@ -128,54 +151,28 @@ class AuthView {
       }
     } catch (e) {
       console.error(e);
-      this.app.showToast('Error de red', 'error');
+      this.app.showToast(e.message || 'No se pudo conectar con el servidor.', 'error');
     }
   }
 
   async _restoreUser() {
     const params = new URLSearchParams(window.location.search);
-    const shouldRestore = params.get('workspace') === '1'
-      || params.get('login') === 'google'
-      || params.has('integration')
-      || params.has('integration_error');
-
-    // `/` representa la portada pública. No reutilizar allí la cuenta de una visita
-    // anterior, especialmente en equipos compartidos.
-    if (!shouldRestore) {
-      try {
-        await fetch('api/auth?action=logout', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}'
-        });
-      } catch (e) {
-        console.warn('No se pudo limpiar la sesión anterior del servidor', e);
-      }
-      sessionStorage.removeItem('tm_user');
-      sessionStorage.removeItem('tm_access_mode');
-      this.app.setUser(null);
-      this._handleOAuthResult();
-      return;
-    }
-
+    // La cookie del servidor determina el acceso, también al abrir la URL raíz.
+    // Visitar la portada no debe revocar una sesión válida.
     try {
-      const res = await fetch('api/auth?action=session', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}'
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.user) {
+      const data = await this._requestAuth('session');
+      if (data.user) {
         sessionStorage.setItem('tm_user', JSON.stringify(data.user));
-        if (shouldRestore) this.app.screen = 'workspace';
+        this.app.screen = 'workspace';
         this.app.setUser(data.user);
+        params.set('workspace', '1');
+        window.history.replaceState({}, '', window.location.pathname + `?${params.toString()}`);
         this._handleOAuthResult();
         return;
       }
     } catch (e) {
-      console.warn('No se pudo restaurar la sesión', e);
+      console.warn('No se pudo restaurar la sesión:', e.message);
+      this._sessionError = e.message;
     }
     sessionStorage.removeItem('tm_user');
     this.app.setUser(null);
@@ -192,7 +189,11 @@ class AuthView {
   _handleOAuthResult() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('login') === 'google') {
-      this.app.showToast('Sesión iniciada con Google', 'success');
+      if (this.app.user && this.app.accessMode === 'authenticated') {
+        this.app.showToast('Sesión iniciada con Google', 'success');
+      } else {
+        this.app.showToast(this._sessionError || 'No se pudo recuperar tu sesión de Google. Vuelve a iniciar sesión.', 'error');
+      }
     } else if (params.get('integration') === 'google') {
       this.app.showToast('Google Workspace conectado', 'success');
       this.app.integrationView?.refresh();
@@ -222,14 +223,10 @@ class AuthView {
 
   async logout() {
     try {
-      await fetch('api/auth?action=logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}'
-      });
+      await this._requestAuth('logout');
     } catch (e) {
-      console.warn('No se pudo cerrar la sesión en el servidor', e);
+      this.app.showToast(e.message || 'No se pudo cerrar la sesión en el servidor.', 'error');
+      return;
     }
     sessionStorage.removeItem('tm_user');
     sessionStorage.removeItem('tm_access_mode');

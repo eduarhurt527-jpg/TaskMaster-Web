@@ -8,7 +8,7 @@ test('el backend principal aplica sesión segura, bcrypt, CORS y límites', asyn
   const server = await read('../server.js');
   assert.match(server, /HttpOnly; SameSite=Lax/);
   assert.match(server, /bcrypt\.compare/);
-  assert.match(server, /allowedOrigins\.includes/);
+  assert.match(server, /isTrustedOrigin/);
   assert.match(server, /rateLimit\(/);
   assert.match(server, /hashSessionToken\(token\)/);
   assert.match(server, /sessionCookie\(token, Math\.floor\(SESSION_TTL_MS \/ 1000\)\)/);
@@ -72,7 +72,7 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   assert.match(index, /Cómo funcionan las integraciones/);
   assert.match(index, /aria-live="polite"/);
   assert.match(integrationView, /Abriendo \$\{this\._providerName\(provider\)\}/);
-  assert.match(authView, /params\.has\('integration'\)/);
+  assert.match(authView, /params\.get\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
   assert.match(authView, /Microsoft 365 conectado/);
   assert.match(authView, /YouTube conectado/);

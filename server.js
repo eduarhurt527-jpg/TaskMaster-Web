@@ -12,6 +12,7 @@ import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypt
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { google } from 'googleapis';
+import { isTrustedOrigin } from './lib/request-origin.js';
 
 dotenv.config();
 
@@ -29,15 +30,12 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .map(origin => origin.trim())
   .filter(Boolean);
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.length === 0) return callback(null, false);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origen no permitido por CORS'));
-  },
+// Las solicitudes del propio dominio son válidas aunque CORS_ORIGIN conserve
+// un dominio anterior. La misma regla se utiliza para CORS y para proteger la API.
+app.use(cors((req, callback) => callback(null, {
+  origin: requestOriginAllowed(req),
   credentials: true,
-}));
+})));
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -52,11 +50,7 @@ app.use('/assets', express.static(path.join(__dirname, 'assets'), {
 }));
 
 function requestOriginAllowed(req) {
-  const origin = req.get('origin');
-  if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
-  const hostOrigin = `${req.protocol}://${req.get('host')}`;
-  return origin === hostOrigin;
+  return isTrustedOrigin(req, allowedOrigins);
 }
 
 function requireTrustedOrigin(req, res, next) {
@@ -65,6 +59,9 @@ function requireTrustedOrigin(req, res, next) {
   }
   next();
 }
+
+// Rechazar otros orígenes con JSON, sin convertir el rechazo en un error HTML.
+app.use('/api', requireTrustedOrigin);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -1000,8 +997,20 @@ app.post('/api/notify', requireTrustedOrigin, requireAuth, async (req, res) => {
   }
 });
 
+// Una ruta API inexistente nunca debe responder con la portada HTML.
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, error: 'Ruta de API no encontrada.' });
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 500 ? error.status : 500;
+  if (status === 500) console.error('TASKMASTER REQUEST ERROR:', error.message);
+  res.status(status).json({ success: false, error: status === 400 ? 'El cuerpo de la solicitud no es válido.' : 'No se pudo completar la solicitud.' });
 });
 
 app.listen(port, () => {
