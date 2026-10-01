@@ -7,11 +7,16 @@ class FileWorkspaceView {
     this.driveButton = document.getElementById('upload-drive');
     this.oneDriveButton = document.getElementById('upload-onedrive');
     this.createDocButton = document.getElementById('create-google-doc');
+    this.docTitle = document.getElementById('google-doc-title');
+    this.docForm = document.getElementById('google-doc-form');
     this.input?.addEventListener('change', () => this.render());
     this.clearButton?.addEventListener('click', () => this.clear());
     this.driveButton?.addEventListener('click', () => this.upload('google/drive'));
     this.oneDriveButton?.addEventListener('click', () => this.upload('microsoft/onedrive'));
-    this.createDocButton?.addEventListener('click', () => this.createGoogleDoc());
+    this.docForm?.addEventListener('submit', event => {
+      event.preventDefault();
+      this.createGoogleDoc();
+    });
   }
 
   render() {
@@ -60,8 +65,11 @@ class FileWorkspaceView {
   async createGoogleDoc() {
     if (this._creatingDoc) return;
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
-    const title = window.prompt('Nombre del nuevo documento', 'Documento TaskMaster');
-    if (!title?.trim()) return;
+    const title = this.docTitle?.value.trim();
+    if (!title) {
+      this.docTitle?.focus();
+      return this.app.showToast('Escribe un nombre para el documento.', 'info');
+    }
     this._creatingDoc = true;
     this.createDocButton.disabled = true;
     try {

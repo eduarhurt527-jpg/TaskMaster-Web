@@ -465,7 +465,12 @@
           <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener"><img src="assets/img/integrations/google-drive.svg" alt="" width="34" height="34"><span><strong>Abrir Google Drive</strong><small>Subir manualmente a Drive</small></span>↗</a>
           <a href="https://onedrive.live.com/" target="_blank" rel="noopener"><img src="assets/img/integrations/onedrive.svg" alt="" width="34" height="34"><span><strong>Abrir OneDrive</strong><small>Subir manualmente a Microsoft</small></span>↗</a>
         </div>
-        <div class="selected-files"><div class="section-header"><div><p class="section-label">SELECCIÓN LOCAL</p><h3>Archivos preparados</h3></div><div><button class="btn btn--primary" id="create-google-doc">Crear Google Doc</button> <button class="btn btn--secondary" id="upload-drive" disabled>Subir a Drive</button> <button class="btn btn--secondary" id="upload-onedrive" disabled>Subir a OneDrive</button> <button class="btn btn--ghost" id="clear-workspace-files" disabled>Limpiar</button></div></div><ul id="workspace-file-list"><li class="file-empty">Todavía no has seleccionado archivos.</li></ul></div>
+        <div class="selected-files"><div class="section-header"><div><p class="section-label">SELECCIÓN LOCAL</p><h3>Archivos preparados</h3></div><div><button class="btn btn--secondary" id="upload-drive" disabled>Subir a Drive</button> <button class="btn btn--secondary" id="upload-onedrive" disabled>Subir a OneDrive</button> <button class="btn btn--ghost" id="clear-workspace-files" disabled>Limpiar</button></div></div>
+          <form id="google-doc-form">
+            <label class="field" for="google-doc-title"><span>Nombre del nuevo documento de Google</span><input id="google-doc-title" type="text" maxlength="200" placeholder="Ej: Notas de trabajo" required></label>
+            <button class="btn btn--primary" id="create-google-doc" type="submit">Crear Google Doc</button>
+          </form>
+          <ul id="workspace-file-list"><li class="file-empty">Todavía no has seleccionado archivos.</li></ul></div>
       </div>
     </section>
 
@@ -695,7 +700,7 @@
   <script src="assets/js/view/PomodoroView.js"></script>
   <script src="assets/js/view/AuthView.js?v=20260930-1"></script>
   <script src="assets/js/view/RecordingView.js?v=20260930-1"></script>
-  <script src="assets/js/view/FileWorkspaceView.js?v=20260930-1"></script>
+  <script src="assets/js/view/FileWorkspaceView.js?v=20261001-1"></script>
   <script src="assets/js/view/IntegrationView.js?v=20260930-1"></script>
   <script src="assets/js/app.js?v=20260913-8"></script>
 </body>
