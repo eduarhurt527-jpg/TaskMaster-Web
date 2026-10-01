@@ -67,7 +67,7 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   assert.match(index, /id="gmail-compose"/);
   assert.match(integrationView, /google\/gmail\/send/);
   assert.match(integrationView, /_renderService\('gmail', Boolean\(data\.google\)\)/);
-  assert.match(integrationView, /_render\('youtube', Boolean\(data\.youtube\)\)/);
+  assert.match(integrationView, /\['google', 'youtube', 'microsoft'\]/);
   assert.match(index, /id="connect-youtube"/);
   assert.match(index, /Cómo funcionan las integraciones/);
   assert.match(index, /aria-live="polite"/);
@@ -110,7 +110,7 @@ test('la portada no solicita permisos y la salida limpia estados privados', asyn
 test('el estado de integraciones valida tokens cifrados y responde con error controlado', async () => {
   const server = await read('../server.js');
   const statusRoute = server.match(/app\.get\('\/api\/integrations\/status'[\s\S]*?\n\}\);/)?.[0] || '';
-  assert.match(statusRoute, /readIntegration\(req\.user\.id, 'google'\)/);
+  assert.match(statusRoute, /integrationStatuses\(provider => readIntegration\(req\.user\.id, provider\)\)/);
   assert.match(statusRoute, /INTEGRATION STATUS ERROR/);
   assert.match(statusRoute, /res\.status\(500\)\.json/);
 });

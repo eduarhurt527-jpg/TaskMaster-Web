@@ -13,6 +13,9 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { google } from 'googleapis';
 import { isTrustedOrigin } from './lib/request-origin.js';
+import { integrationStatuses } from './lib/integration-status.js';
+import { microsoftScopes } from './lib/microsoft-scopes.js';
+import { integrationFailure } from './lib/integration-errors.js';
 
 dotenv.config();
 
@@ -184,6 +187,7 @@ async function readIntegration(userId, provider) {
 }
 
 function googleIntegrationClient(tokens = null) {
+  if (!process.env.GOOGLE_LOGIN_CLIENT_ID || !process.env.GOOGLE_LOGIN_CLIENT_SECRET || !process.env.GOOGLE_INTEGRATION_REDIRECT_URI) throw new Error('Configuración de Google Workspace incompleta.');
   const client = new google.auth.OAuth2(process.env.GOOGLE_LOGIN_CLIENT_ID, process.env.GOOGLE_LOGIN_CLIENT_SECRET, process.env.GOOGLE_INTEGRATION_REDIRECT_URI);
   if (tokens) client.setCredentials(tokens);
   return client;
@@ -191,10 +195,25 @@ function googleIntegrationClient(tokens = null) {
 
 function youtubeIntegrationClient(tokens = null) {
   const redirectUri = process.env.YOUTUBE_INTEGRATION_REDIRECT_URI;
-  if (!redirectUri) throw new Error('YouTube todavía no está configurado para vincularse.');
+  if (!redirectUri || !process.env.GOOGLE_LOGIN_CLIENT_ID || !process.env.GOOGLE_LOGIN_CLIENT_SECRET) throw new Error('YouTube todavía no está configurado para vincularse.');
   const client = new google.auth.OAuth2(process.env.GOOGLE_LOGIN_CLIENT_ID, process.env.GOOGLE_LOGIN_CLIENT_SECRET, redirectUri);
   if (tokens) client.setCredentials(tokens);
   return client;
+}
+
+async function readyGoogleClient(userId, tokens, provider = 'google') {
+  const client = provider === 'youtube' ? youtubeIntegrationClient(tokens) : googleIntegrationClient(tokens);
+  await client.getAccessToken();
+  if (client.credentials.access_token !== tokens.access_token) {
+    await saveIntegration(userId, provider, { ...tokens, ...client.credentials });
+  }
+  return client;
+}
+
+function reportIntegrationFailure(res, error, service) {
+  const failure = integrationFailure(error, service);
+  console.error('INTEGRATION OPERATION ERROR:', { service, status: failure.status });
+  return res.status(failure.status).json({ success: false, error: failure.message });
 }
 
 async function createSession(res, user, additionalCookies = []) {
@@ -596,8 +615,11 @@ app.delete('/api/tareas', async (req, res) => {
 
 app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
   try {
-    const action = req.query.action || req.body.action;
-    const { nombre = '', email = '', password = '' } = req.body;
+    const action = req.query.action || req.body?.action;
+    const { nombre = '', email = '', password = '' } = req.body || {};
+    if ([nombre, email, password].some(value => typeof value !== 'string')) {
+      return res.status(400).json({ success: false, error: 'Completa el nombre, correo y contraseña con texto válido.' });
+    }
 
     if (!['login', 'register', 'google', 'session', 'logout'].includes(action)) {
       return res.status(405).json({ success: false, error: 'Acción no soportada.' });
@@ -620,7 +642,7 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 
     if (action === 'register') {
       if (!nombre.trim() || !email.trim() || !password) {
-        return res.status(400).json({ success: false, error: 'Campos incompletos' });
+        return res.status(400).json({ success: false, error: 'Completa tu nombre, correo y contraseña para crear la cuenta.' });
       }
 
       const normalizedEmail = email.trim().toLowerCase();
@@ -628,7 +650,7 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
         return res.status(400).json({ success: false, error: 'Introduce un correo válido.' });
       }
       if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
-        return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres y un máximo de 72 bytes.' });
+        return res.status(400).json({ success: false, error: password.length < 8 ? 'Usa una contraseña de al menos 8 caracteres.' : 'La contraseña es demasiado larga. Reduce su longitud e inténtalo nuevamente.' });
       }
       if (nombre.trim().length > 100 || normalizedEmail.length > 254) {
         return res.status(400).json({ success: false, error: 'Nombre o correo demasiado largo.' });
@@ -636,7 +658,7 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 
       const existing = await db.collection('usuarios').where('email', '==', normalizedEmail).limit(1).get();
       if (!existing.empty) {
-        return res.status(409).json({ success: false, error: 'Este correo ya está registrado.' });
+        return res.status(409).json({ success: false, error: 'Este correo ya está registrado. Inicia sesión; si creaste tu cuenta con Google, utiliza ese botón.' });
       }
 
       const hash = await bcrypt.hash(password, 10);
@@ -656,7 +678,7 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 
     if (action === 'login') {
       if (!email.trim() || !password) {
-        return res.status(400).json({ success: false, error: 'Campos incompletos' });
+        return res.status(400).json({ success: false, error: 'Introduce tu correo y contraseña para iniciar sesión.' });
       }
 
       const normalizedEmail = email.trim().toLowerCase();
@@ -693,16 +715,13 @@ app.post('/api/auth', requireTrustedOrigin, authLimiter, async (req, res) => {
 // ── Integraciones OAuth y archivos ──────────────────────────────────────
 app.get('/api/integrations/status', requireAuth, async (req, res) => {
   try {
-    const [google, youtube, microsoft] = await Promise.all([
-      readIntegration(req.user.id, 'google'),
-      readIntegration(req.user.id, 'youtube'),
-      readIntegration(req.user.id, 'microsoft'),
-    ]);
+    const connections = await integrationStatuses(provider => readIntegration(req.user.id, provider));
     res.json({
       success: true,
-      google: Boolean(google),
-      youtube: Boolean(youtube),
-      microsoft: Boolean(microsoft),
+      google: connections.google.connected === true,
+      youtube: connections.youtube.connected === true,
+      microsoft: connections.microsoft.connected === true,
+      connections,
     });
   } catch (error) {
     console.error('INTEGRATION STATUS ERROR:', error.message);
@@ -715,6 +734,7 @@ app.get('/api/integrations/status', requireAuth, async (req, res) => {
 
 app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
   try {
+    integrationKey();
     if (!process.env.GOOGLE_INTEGRATION_REDIRECT_URI) throw new Error('Falta GOOGLE_INTEGRATION_REDIRECT_URI.');
     const state = randomBytes(32).toString('base64url');
     const pkce = createPkce();
@@ -732,6 +752,7 @@ app.get('/api/integrations/google/start', requireAuth, async (req, res) => {
 
 app.get('/api/integrations/youtube/start', requireAuth, async (req, res) => {
   try {
+    integrationKey();
     const state = randomBytes(32).toString('base64url');
     const pkce = createPkce();
     await db.collection('_integration_states').doc(hashSessionToken(state)).set({
@@ -784,14 +805,17 @@ app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
 
 app.get('/api/integrations/microsoft/start', requireAuth, async (req, res) => {
   try {
+    integrationKey();
     const clientId = process.env.MICROSOFT_CLIENT_ID;
     const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
-    if (!clientId || !redirectUri) throw new Error('Microsoft OAuth no configurado.');
+    if (!clientId || !redirectUri || !process.env.MICROSOFT_CLIENT_SECRET) throw new Error('Microsoft OAuth no configurado.');
     const state = randomBytes(32).toString('base64url');
     const pkce = createPkce();
-    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', code_verifier: pkce.verifier, expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
-    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All', state, code_challenge: pkce.challenge, code_challenge_method: 'S256' });
-    res.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
+    const accountType = req.query.account_type === 'organization' ? 'organization' : 'personal';
+    const scope = microsoftScopes(accountType);
+    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', account_type: accountType, scope, code_verifier: pkce.verifier, expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
+    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope, state, code_challenge: pkce.challenge, code_challenge_method: 'S256' });
+    res.redirect(`https://login.microsoftonline.com/${accountType === 'organization' ? 'organizations' : 'consumers'}/oauth2/v2.0/authorize?${params}`);
   } catch (error) { res.redirect('/?integration_error=microsoft_config'); }
 });
 
@@ -801,11 +825,11 @@ app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) =>
     const snap = await ref.get();
     if (!snap.exists || snap.data().provider !== 'microsoft' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
     await ref.delete();
-    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, code_verifier: snap.data().code_verifier, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All' });
+    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, code_verifier: snap.data().code_verifier, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: snap.data().scope || microsoftScopes('organization') });
     const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     const tokens = await response.json();
     if (!response.ok) throw new Error(tokens.error_description || 'Microsoft rechazó el token.');
-    await saveIntegration(req.user.id, 'microsoft', tokens);
+    await saveIntegration(req.user.id, 'microsoft', { ...tokens, account_type: snap.data().account_type || 'organization' });
     res.redirect('/?integration=microsoft');
   } catch (error) { console.error('MICROSOFT INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=microsoft'); }
 });
@@ -847,30 +871,30 @@ app.get('/api/integrations/google/calendar/events', requireAuth, async (req, res
   try {
     const tokens = await readIntegration(req.user.id, 'google');
     if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
-    const calendar = google.calendar({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const calendar = google.calendar({ version: 'v3', auth: await readyGoogleClient(req.user.id, tokens) });
     const result = await calendar.events.list({ calendarId: 'primary', timeMin: new Date().toISOString(), maxResults: 50, singleEvents: true, orderBy: 'startTime' });
     res.json({ success: true, events: result.data.items || [] });
-  } catch (error) { res.status(502).json({ success: false, error: 'No se pudo consultar Calendar.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'Google Calendar'); }
 });
 
 app.get('/api/integrations/google/classroom/courses', requireAuth, async (req, res) => {
   try {
     const tokens = await readIntegration(req.user.id, 'google');
     if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
-    const classroom = google.classroom({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const classroom = google.classroom({ version: 'v1', auth: await readyGoogleClient(req.user.id, tokens) });
     const result = await classroom.courses.list({ courseStates: ['ACTIVE'], pageSize: 50 });
     res.json({ success: true, courses: result.data.courses || [] });
-  } catch (error) { res.status(502).json({ success: false, error: 'No se pudo consultar Classroom.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'Google Classroom'); }
 });
 
 app.post('/api/integrations/google/docs', requireTrustedOrigin, requireAuth, async (req, res) => {
   try {
     const tokens = await readIntegration(req.user.id, 'google');
     if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
-    const docs = google.docs({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const docs = google.docs({ version: 'v1', auth: await readyGoogleClient(req.user.id, tokens) });
     const result = await docs.documents.create({ requestBody: { title: String(req.body.title || 'Documento TaskMaster').slice(0, 120) } });
     res.json({ success: true, documentId: result.data.documentId, url: `https://docs.google.com/document/d/${result.data.documentId}/edit` });
-  } catch (error) { console.error('DOCS CREATE ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo crear el documento.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'Google Docs'); }
 });
 
 app.post('/api/integrations/google/drive/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
@@ -879,10 +903,10 @@ app.post('/api/integrations/google/drive/upload', requireTrustedOrigin, requireA
     if (!tokens) return res.status(409).json({ success: false, error: 'Conecta Google primero.' });
     const name = decodeURIComponent(req.get('X-File-Name') || 'archivo-taskmaster');
     const { Readable } = await import('stream');
-    const drive = google.drive({ version: 'v3', auth: googleIntegrationClient(tokens) });
+    const drive = google.drive({ version: 'v3', auth: await readyGoogleClient(req.user.id, tokens) });
     const result = await drive.files.create({ requestBody: { name: name.slice(0, 240) }, media: { mimeType: req.get('X-File-Type') || 'application/octet-stream', body: Readable.from(req.body) }, fields: 'id,name,webViewLink' });
     res.json({ success: true, file: result.data });
-  } catch (error) { console.error('DRIVE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir a Drive.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'Google Drive'); }
 });
 
 app.post('/api/integrations/google/youtube/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'video/webm', limit: '100mb' }), async (req, res) => {
@@ -890,10 +914,10 @@ app.post('/api/integrations/google/youtube/upload', requireTrustedOrigin, requir
     const tokens = await readIntegration(req.user.id, 'youtube');
     if (!tokens) return res.status(409).json({ success: false, error: 'Vincula YouTube con TaskMaster antes de subir el video.' });
     const { Readable } = await import('stream');
-    const youtube = google.youtube({ version: 'v3', auth: youtubeIntegrationClient(tokens) });
-    const result = await youtube.videos.insert({ part: ['snippet','status'], requestBody: { snippet: { title: String(req.get('X-Video-Title') || 'Grabación TaskMaster').slice(0, 100) }, status: { privacyStatus: 'private' } }, media: { body: Readable.from(req.body) } });
+    const youtube = google.youtube({ version: 'v3', auth: await readyGoogleClient(req.user.id, tokens, 'youtube') });
+    const result = await youtube.videos.insert({ part: ['snippet','status'], requestBody: { snippet: { title: decodeURIComponent(req.get('X-Video-Title') || 'Grabación TaskMaster').slice(0, 100) }, status: { privacyStatus: 'private' } }, media: { body: Readable.from(req.body) } });
     res.json({ success: true, videoId: result.data.id, url: `https://youtu.be/${result.data.id}` });
-  } catch (error) { console.error('YOUTUBE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir el video.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'YouTube'); }
 });
 
 app.post('/api/integrations/google/gmail/send', requireTrustedOrigin, requireAuth, async (req, res) => {
@@ -925,12 +949,11 @@ app.post('/api/integrations/google/gmail/send', requireTrustedOrigin, requireAut
       message,
     ].join('\r\n');
     const raw = Buffer.from(mime, 'utf8').toString('base64url');
-    const gmail = google.gmail({ version: 'v1', auth: googleIntegrationClient(tokens) });
+    const gmail = google.gmail({ version: 'v1', auth: await readyGoogleClient(req.user.id, tokens) });
     const result = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
     res.json({ success: true, messageId: result.data.id || null });
   } catch (error) {
-    console.error('GMAIL SEND ERROR:', error.message);
-    res.status(502).json({ success: false, error: 'No se pudo enviar el correo con Gmail.' });
+    reportIntegrationFailure(res, error, 'Gmail');
   }
 });
 
@@ -938,10 +961,11 @@ async function microsoftAccessToken(userId) {
   let tokens = await readIntegration(userId, 'microsoft');
   if (!tokens) return null;
   if (tokens.access_token && Date.now() < Number(tokens.acquired_at || 0) + (Number(tokens.expires_in || 3600) - 120) * 1000) return tokens.access_token;
-  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: 'offline_access User.Read Files.ReadWrite Calendars.ReadWrite Team.ReadBasic.All' });
+  if (!tokens.refresh_token) throw new Error('La conexión con Microsoft caducó. Vuelve a vincularla.');
+  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: tokens.scope || microsoftScopes(tokens.account_type || 'organization') });
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
   const refreshed = await response.json();
-  if (!response.ok) throw new Error('No se pudo renovar Microsoft OAuth.');
+  if (!response.ok) throw Object.assign(new Error('No se pudo renovar Microsoft OAuth.'), { response: { status: response.status, data: refreshed } });
   tokens = { ...tokens, ...refreshed };
   await saveIntegration(userId, 'microsoft', tokens);
   return tokens.access_token;
@@ -952,24 +976,35 @@ app.post('/api/integrations/microsoft/onedrive/upload', requireTrustedOrigin, re
     const accessToken = await microsoftAccessToken(req.user.id);
     if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
     const safeName = decodeURIComponent(req.get('X-File-Name') || 'archivo-taskmaster').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
+    const folder = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/TaskMaster', { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (folder.status === 404) {
+      const created = await fetch('https://graph.microsoft.com/v1.0/me/drive/root/children', {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'TaskMaster', folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
+      });
+      if (!created.ok && created.status !== 409) throw new Error('No se pudo preparar la carpeta TaskMaster en OneDrive.');
+    } else if (!folder.ok) throw new Error('No se pudo acceder a OneDrive.');
     const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/TaskMaster/${encodeURIComponent(safeName)}:/content`, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': req.get('X-File-Type') || 'application/octet-stream' }, body: req.body });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Microsoft Graph rechazó el archivo.');
+    if (!response.ok) throw Object.assign(new Error('Microsoft Graph rechazó el archivo.'), { status: response.status });
     res.json({ success: true, file: { id: data.id, name: data.name, webUrl: data.webUrl } });
-  } catch (error) { console.error('ONEDRIVE UPLOAD ERROR:', error.message); res.status(502).json({ success: false, error: 'No se pudo subir a OneDrive.' }); }
+  } catch (error) { reportIntegrationFailure(res, error, 'OneDrive'); }
 });
 
 async function microsoftGraph(req, res, resource, resultKey) {
   try {
+    if (resultKey === 'teams') {
+      const tokens = await readIntegration(req.user.id, 'microsoft');
+      if (tokens?.account_type === 'personal') return res.status(422).json({ success: false, error: 'Para consultar Teams dentro de TaskMaster necesitas una cuenta de trabajo o estudio. También puedes abrir Teams directamente.' });
+    }
     const accessToken = await microsoftAccessToken(req.user.id);
     if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
     const response = await fetch(`https://graph.microsoft.com/v1.0/${resource}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Microsoft Graph rechazó la solicitud.');
+    if (!response.ok) throw Object.assign(new Error('Microsoft Graph rechazó la solicitud.'), { status: response.status });
     res.json({ success: true, [resultKey]: data.value || [] });
   } catch (error) {
-    console.error('MICROSOFT GRAPH ERROR:', error.message);
-    res.status(502).json({ success: false, error: `No se pudo consultar ${resultKey}.` });
+    reportIntegrationFailure(res, error, resultKey === 'teams' ? 'Microsoft Teams' : 'Calendario de Microsoft');
   }
 }
 

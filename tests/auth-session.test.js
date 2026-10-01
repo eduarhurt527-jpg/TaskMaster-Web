@@ -21,6 +21,7 @@ test('conserva orígenes externos autorizados y solicitudes sin cabecera Origin'
 });
 
 const source = await readFile(new URL('../assets/js/view/AuthView.js', import.meta.url), 'utf8');
+const apiSource = await readFile(new URL('../assets/js/ApiClient.js', import.meta.url), 'utf8');
 function fixture({ status = 200, body = { success: true, user: { id: 7, nombre: 'Prueba' } }, type = 'application/json' } = {}) {
   const store = new Map();
   const location = { search: '?login=google', pathname: '/' };
@@ -30,7 +31,7 @@ function fixture({ status = 200, body = { success: true, user: { id: 7, nombre: 
   const context = vm.createContext({ console: {warn(){}}, URLSearchParams, window: { location, history: {replaceState(_a,_b,url){location.search=url.includes('?')?'?'+url.split('?')[1]:'';}} },
     sessionStorage: {getItem:key=>store.get(key),setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)},
     fetch:async()=>({ok:status>=200&&status<300,status,headers:{get:()=>type},text:async()=>typeof body==='string'?body:JSON.stringify(body)})});
-  vm.runInContext(source+'\nthis.AuthClass = AuthView;',context);
+  vm.runInContext(apiSource+'\n'+source+'\nthis.AuthClass = AuthView;',context);
   const auth = Object.create(context.AuthClass.prototype); auth.app = app;
   return {auth,app,notices,location};
 }
@@ -62,7 +63,8 @@ test('abrir la raíz sin sesión conserva la portada y no anuncia acceso', async
 test('regreso de Google con HTTP 500 HTML no muestra un éxito falso', async () => {
   const {auth,app,notices} = fixture({status:500,type:'text/html',body:'<!DOCTYPE html><title>Error</title>'});
   await auth._restoreUser(); assert.equal(app.user,null); assert.equal(app.screen,'public');
-  assert.equal(notices.at(-1).kind,'error'); assert.match(notices.at(-1).message,/HTTP 500/);
+  assert.equal(notices.at(-1).kind,'error'); assert.match(notices.at(-1).message,/Inténtalo nuevamente/);
+  assert.doesNotMatch(notices.at(-1).message,/HTTP|JSON|500|SyntaxError/);
   assert.equal(notices.some(n=>n.kind==='success'),false);
 });
 test('sesión caducada, JSON corrupto y respuesta vacía mantienen la portada pública', async () => {

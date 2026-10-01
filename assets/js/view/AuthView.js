@@ -95,30 +95,19 @@ class AuthView {
   }
 
   async _requestAuth(action, payload = {}) {
-    const response = await fetch(`api/auth?action=${action}`, {
+    const data = await taskMasterApi.request(`api/auth?action=${action}`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload)
-    });
-    const ok = response.ok;
-    const raw = await response.text();
-    let data;
-    if ((response.headers.get('content-type') || '').includes('application/json') && raw.trim()) {
-      try { data = JSON.parse(raw); } catch (_) { /* Mensaje controlado debajo. */ }
-    }
-    if (!data || typeof data.success !== 'boolean') {
-      throw Object.assign(new Error(`El servidor no devolvió JSON válido (HTTP ${response.status}).`), { status: response.status });
-    }
-    if (!ok || !data.success) {
-      throw Object.assign(new Error(data.error || `No se pudo completar la solicitud (HTTP ${response.status}).`), { status: response.status });
-    }
+    }, action === 'login' ? 'login' : 'session');
     if (action !== 'logout' && (!data.user || data.user.id == null)) {
-      throw new Error('El servidor no devolvió una sesión válida.');
+      throw new Error('No pudimos confirmar tu sesión. Vuelve a iniciar sesión.');
     }
     return data;
   }
 
   async _submit() {
+    if (this._submitting) return;
     if (this.mode === 'google') {
       return this._submitGoogle();
     }
@@ -132,6 +121,9 @@ class AuthView {
 
     const payload = { nombre, email, password };
     const action = this.mode === 'login' ? 'login' : 'register';
+    this._submitting = true;
+    this.$submit.disabled = true;
+    this.$submit.setAttribute('aria-busy', 'true');
     try {
       const data = await this._requestAuth(action, payload);
       if (data.success) {
@@ -152,6 +144,10 @@ class AuthView {
     } catch (e) {
       console.error(e);
       this.app.showToast(e.message || 'No se pudo conectar con el servidor.', 'error');
+    } finally {
+      this._submitting = false;
+      this.$submit.disabled = false;
+      this.$submit.removeAttribute('aria-busy');
     }
   }
 
@@ -188,12 +184,15 @@ class AuthView {
 
   _handleOAuthResult() {
     const params = new URLSearchParams(window.location.search);
+    const integrationReturn = params.has('integration') || params.has('integration_error');
     if (params.get('login') === 'google') {
       if (this.app.user && this.app.accessMode === 'authenticated') {
         this.app.showToast('Sesión iniciada con Google', 'success');
       } else {
         this.app.showToast(this._sessionError || 'No se pudo recuperar tu sesión de Google. Vuelve a iniciar sesión.', 'error');
       }
+    } else if (params.has('integration') && (!this.app.user || this.app.accessMode !== 'authenticated')) {
+      this.app.showToast('Inicia sesión nuevamente para comprobar la conexión del servicio.', 'warning');
     } else if (params.get('integration') === 'google') {
       this.app.showToast('Google Workspace conectado', 'success');
       this.app.integrationView?.refresh();
@@ -204,11 +203,16 @@ class AuthView {
       this.app.showToast('YouTube conectado', 'success');
       this.app.integrationView?.refresh();
     } else if (params.get('auth_error') === 'google_config') {
-      this.app.showToast('Google Login todavía no está configurado en el servidor', 'error');
+      this.app.showToast('El acceso con Google no está disponible en este momento. Puedes usar tu correo y contraseña o volver a intentarlo más tarde.', 'error');
     } else if (params.get('auth_error') === 'google') {
-      this.app.showToast('Google no pudo verificar el inicio de sesión', 'error');
+      this.app.showToast('No se completó el acceso con Google. Vuelve a intentarlo y completa la autorización.', 'error');
     } else if (params.get('integration_error')) {
-      this.app.showToast('No se pudo completar la conexión de la integración', 'error');
+      const provider = params.get('integration_error').split('_')[0];
+      const name = { google: 'Google Workspace', microsoft: 'Microsoft 365', youtube: 'YouTube' }[provider] || 'el servicio';
+      const message = params.get('integration_error').endsWith('_config')
+        ? `La conexión con ${name} no está disponible en este momento. Puedes abrir su aplicación oficial e intentarlo más tarde.`
+        : `No se completó la conexión con ${name}. Vuelve a vincular tu cuenta y completa la autorización.`;
+      this.app.showToast(message, 'error');
     } else {
       return;
     }
@@ -219,6 +223,10 @@ class AuthView {
     if (this.app.accessMode === 'authenticated') params.set('workspace', '1');
     const query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    if (this.app.accessMode === 'authenticated' && integrationReturn) {
+      // Los regresos de las integraciones deben mostrar sus controles, no la portada.
+      if (this.app._cambiarVista && this.app.integrationView) this.app._cambiarVista('integrations');
+    }
   }
 
   async logout() {

@@ -39,7 +39,7 @@ class RecordingView {
   _setSupported() {
     const supported = Boolean(navigator.mediaDevices && window.MediaRecorder);
     if (!supported) {
-      this.status.textContent = 'Este navegador no admite la grabación mediante MediaRecorder.';
+      this.status.textContent = 'Este navegador no permite grabar aquí. Prueba con una versión reciente de Chrome o Edge.';
       document.querySelectorAll('[data-record-source]').forEach(button => { button.disabled = true; });
     }
   }
@@ -72,7 +72,7 @@ class RecordingView {
       this.cleanupStream();
       this.status.textContent = error.name === 'NotAllowedError'
         ? 'Permiso cancelado. TaskMaster no activó ni guardó ningún dispositivo.'
-        : `No fue posible preparar la grabación: ${error.message}`;
+        : 'No pudimos iniciar la grabación. Comprueba que la cámara o el micrófono estén disponibles y vuelve a intentarlo.';
     }
   }
 
@@ -172,12 +172,15 @@ class RecordingView {
   async uploadYouTube() {
     if (!this.outputBlob) return;
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
+    if (this.outputBlob.size > 4 * 1024 * 1024) {
+      this.app.showToast('Este video supera los 4 MB permitidos para subir desde TaskMaster. Descárgalo y súbelo directamente a YouTube.', 'warning');
+      return;
+    }
     this.youtubeApi.disabled = true;
     this.status.textContent = 'Subiendo el video privado a YouTube…';
     try {
-      const response = await fetch('/api/integrations/google/youtube/upload', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'video/webm', 'X-Video-Title': `Grabación TaskMaster ${new Date().toLocaleString()}` }, body: this.outputBlob });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'No se pudo subir.');
+      const data = await taskMasterApi.request('/api/integrations/google/youtube/upload', { method: 'POST', headers: { 'Content-Type': 'video/webm', 'X-Video-Title': encodeURIComponent(`Grabación TaskMaster ${new Date().toLocaleString()}`) }, body: this.outputBlob }, 'integration');
+      if (!data.videoId || !data.url?.startsWith('https://youtu.be/')) throw new Error('No pudimos confirmar la subida. Revisa tu cuenta de YouTube antes de volver a intentarlo.');
       this.status.textContent = `Video privado publicado: ${data.url}`;
       this.app.showToast('Video privado subido a YouTube', 'success');
     } catch (error) { this.status.textContent = error.message; this.app.showToast(error.message, 'error'); }

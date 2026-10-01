@@ -33,26 +33,56 @@ class FileWorkspaceView {
   }
 
   async upload(destination) {
+    if (this._uploading) return;
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
     const files = [...this.input.files];
+    if (!files.length) return this.app.showToast('Selecciona al menos un archivo para subir.', 'info');
+    if (files.some(file => file.size > 4 * 1024 * 1024)) return this.app.showToast('Selecciona archivos de hasta 4 MB para subir desde TaskMaster. Para archivos mayores, usa Drive o OneDrive directamente.', 'warning');
+    this._uploading = true;
+    this.driveButton.disabled = true;
+    this.oneDriveButton.disabled = true;
+    let uploaded = 0;
+    try {
     for (const file of files) {
       this.app.showToast(`Subiendo ${file.name}…`, 'info');
-      const response = await fetch(`/api/integrations/${destination}/upload`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), 'X-File-Type': file.type || 'application/octet-stream' }, body: file });
-      const data = await response.json();
-      if (!response.ok) { this.app.showToast(data.error || 'No se pudo subir el archivo', 'error'); return; }
+      await taskMasterApi.request(`/api/integrations/${destination}/upload`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), 'X-File-Type': file.type || 'application/octet-stream' }, body: file }, 'integration');
+      uploaded++;
     }
     this.app.showToast('Archivos subidos correctamente', 'success');
+    } catch (error) {
+      this.app.showToast(`${uploaded ? `Se subieron ${uploaded} de ${files.length} archivos. ` : ''}${error.message}`, 'error');
+    } finally {
+      this._uploading = false;
+      this.render();
+    }
   }
 
   async createGoogleDoc() {
+    if (this._creatingDoc) return;
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
     const title = window.prompt('Nombre del nuevo documento', 'Documento TaskMaster');
-    if (!title) return;
-    const response = await fetch('/api/integrations/google/docs', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
-    const data = await response.json();
-    if (!response.ok) return this.app.showToast(data.error || 'No se pudo crear el documento', 'error');
+    if (!title?.trim()) return;
+    this._creatingDoc = true;
+    this.createDocButton.disabled = true;
+    try {
+    const data = await taskMasterApi.request('/api/integrations/google/docs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.trim() }) }, 'integration');
+    if (!data.documentId || !data.url?.startsWith('https://docs.google.com/document/d/')) throw new Error('No pudimos confirmar la creación del documento. Revisa Google Docs antes de volver a intentarlo.');
+    const item = document.createElement('li');
+    const link = document.createElement('a');
+    link.href = data.url;
+    link.textContent = `Abrir ${title.trim()}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    item.appendChild(link);
+    this.list.appendChild(item);
     window.open(data.url, '_blank', 'noopener');
     this.app.showToast('Documento creado en Google Docs', 'success');
+    } catch (error) {
+      this.app.showToast(error.message, 'error');
+    } finally {
+      this._creatingDoc = false;
+      this.createDocButton.disabled = false;
+    }
   }
 
   _extension(name) {
