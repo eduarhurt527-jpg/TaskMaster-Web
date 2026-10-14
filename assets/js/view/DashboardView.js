@@ -13,9 +13,9 @@ class DashboardView {
   }
 
   render() {
-    const { porDia, pomHoy, avanceCategorias, categorias } = this._vm.getDatosDashboard();
+    const { porDia, pomTotal, avanceCategorias, categorias } = this._vm.getDatosDashboard();
     this._renderBarChart(porDia, categorias);
-    this._renderPomStats(pomHoy);
+    this._renderPomStats(pomTotal);
     this._renderCategoriaProgress(avanceCategorias);
   }
 
@@ -57,15 +57,15 @@ class DashboardView {
     });
   }
 
-  _renderPomStats(pomHoy) {
+  _renderPomStats(pomTotal) {
     this.$pomStats.innerHTML = `
       <div class="pom-stat">
-        <div class="pom-stat__num">🍅 ${pomHoy}</div>
-        <div class="pom-stat__label">Pomodoros hoy</div>
+        <div class="pom-stat__num">🍅 ${pomTotal}</div>
+        <div class="pom-stat__label">Sesiones registradas en tus tareas</div>
       </div>
       <div class="pom-stat">
-        <div class="pom-stat__num">⏱ ${pomHoy * 25}</div>
-        <div class="pom-stat__label">Minutos de enfoque</div>
+        <div class="pom-stat__num">⏱ ${pomTotal * 25}</div>
+        <div class="pom-stat__label">Minutos estimados (25 por sesión)</div>
       </div>`;
     // añadir botón para crear tarea de enfoque rápido
     const btn = document.createElement('button');
