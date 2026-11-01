@@ -19,7 +19,8 @@ test('el backend principal aplica sesión segura, bcrypt, CORS y límites', asyn
 test('OAuth usa state, PKCE S256, tokens cifrados y revocación', async () => {
   const server = await read('../server.js');
   assert.match(server, /code_challenge_method: 'S256'/);
-  assert.match(server, /codeVerifier: snap\.data\(\)\.code_verifier/);
+  assert.match(server, /codeVerifier: stateData\.code_verifier/);
+  assert.match(server, /codeVerifier: loginState\.code_verifier/);
   assert.doesNotMatch(server, /microsoft|MICROSOFT|onedrive|joinedTeams/);
   assert.match(server, /createCipheriv\('aes-256-gcm'/);
   assert.match(server, /revokeToken\(token\)/);

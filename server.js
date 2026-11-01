@@ -15,6 +15,7 @@ import { google } from 'googleapis';
 import { isTrustedOrigin } from './lib/request-origin.js';
 import { integrationStatuses } from './lib/integration-status.js';
 import { integrationFailure } from './lib/integration-errors.js';
+import { validOAuthCallback, consumeOAuthState } from './lib/oauth-state.js';
 
 dotenv.config();
 
@@ -291,7 +292,9 @@ app.get('/api/auth/google/start', authLimiter, async (req, res) => {
   try {
     const state = randomBytes(32).toString('base64url');
     const stateHash = hashSessionToken(state);
+    const pkce = createPkce();
     await db.collection('_google_login_states').doc(stateHash).set({
+      code_verifier: pkce.verifier,
       expires_at: Date.now() + GOOGLE_STATE_TTL_MS,
       created_at: new Date().toISOString(),
     });
@@ -304,6 +307,8 @@ app.get('/api/auth/google/start', authLimiter, async (req, res) => {
       access_type: 'online',
       prompt: 'select_account',
       scope: ['openid', 'email', 'profile'],
+      code_challenge: pkce.challenge,
+      code_challenge_method: 'S256',
       state,
     });
     res.redirect(url);
@@ -316,7 +321,7 @@ app.get('/api/auth/google/start', authLimiter, async (req, res) => {
 app.get('/api/auth/google/callback', authLimiter, async (req, res) => {
   const clearStateCookie = shortLivedCookie(GOOGLE_STATE_COOKIE, '', 0);
   try {
-    if (req.query.error || !req.query.code || !req.query.state) {
+    if (!validOAuthCallback(req.query)) {
       throw new Error('Autorización cancelada o incompleta.');
     }
 
@@ -326,13 +331,9 @@ app.get('/api/auth/google/callback', authLimiter, async (req, res) => {
     }
 
     const stateRef = db.collection('_google_login_states').doc(hashSessionToken(req.query.state));
-    const stateDoc = await stateRef.get();
-    if (!stateDoc.exists) throw new Error('Estado OAuth inexistente.');
-    await stateRef.delete();
-    if (stateDoc.data().expires_at <= Date.now()) throw new Error('Estado OAuth expirado.');
-
+    const loginState = await consumeOAuthState(db, stateRef);
     const client = googleOAuthClient();
-    const { tokens } = await client.getToken(req.query.code);
+    const { tokens } = await client.getToken({ code: req.query.code, codeVerifier: loginState.code_verifier });
     if (!tokens.id_token) throw new Error('Google no devolvió un ID token.');
 
     const ticket = await client.verifyIdToken({
@@ -776,11 +777,10 @@ app.get('/api/integrations/youtube/start', requireAuth, async (req, res) => {
 
 app.get('/api/integrations/youtube/callback', requireAuth, async (req, res) => {
   try {
-    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().provider !== 'youtube' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('La autorización ya no es válida. Intenta vincular YouTube nuevamente.');
-    await ref.delete();
-    const { tokens } = await youtubeIntegrationClient().getToken({ code: req.query.code, codeVerifier: snap.data().code_verifier });
+    if (!validOAuthCallback(req.query)) throw new Error('Autorización cancelada o incompleta.');
+    const ref = db.collection('_integration_states').doc(hashSessionToken(req.query.state));
+    const stateData = await consumeOAuthState(db, ref, { provider: 'youtube', userId: req.user.id });
+    const { tokens } = await youtubeIntegrationClient().getToken({ code: req.query.code, codeVerifier: stateData.code_verifier });
     await saveIntegration(req.user.id, 'youtube', tokens);
     res.redirect('/?integration=youtube');
   } catch (error) {
@@ -791,11 +791,10 @@ app.get('/api/integrations/youtube/callback', requireAuth, async (req, res) => {
 
 app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
   try {
-    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().provider !== 'google' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
-    await ref.delete();
-    const { tokens } = await googleIntegrationClient().getToken({ code: req.query.code, codeVerifier: snap.data().code_verifier });
+    if (!validOAuthCallback(req.query)) throw new Error('Autorización cancelada o incompleta.');
+    const ref = db.collection('_integration_states').doc(hashSessionToken(req.query.state));
+    const stateData = await consumeOAuthState(db, ref, { provider: 'google', userId: req.user.id });
+    const { tokens } = await googleIntegrationClient().getToken({ code: req.query.code, codeVerifier: stateData.code_verifier });
     await saveIntegration(req.user.id, 'google', tokens);
     res.redirect('/?integration=google');
   } catch (error) { console.error('GOOGLE INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=google'); }
