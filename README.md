@@ -29,7 +29,7 @@ Si `serviceAccountKey.json` falta o es inválido, el servidor lo indica claramen
 ### Integraciones (opcionales)
 
 `server.js` es el único backend activo. Expone autenticación, tareas y las rutas protegidas
-de Google Workspace, YouTube y Microsoft 365 bajo el mismo origen. La carpeta
+de Google Workspace y YouTube bajo el mismo origen. La carpeta
 `integraciones/` conserva módulos históricos de referencia y no debe iniciarse como un
 segundo servidor.
 
@@ -60,7 +60,7 @@ integraciones/           → módulos heredados de referencia; no se inicia otro
   y no se mezclan con las cuentas registradas.
 - El acceso con Google usa OAuth 2.0/OpenID Connect. El backend intercambia el código,
   verifica el ID token firmado, exige un correo verificado y crea la misma sesión segura.
-  Las autorizaciones Google/Microsoft de `integraciones/` son independientes.
+  Las autorizaciones Google de `integraciones/` son independientes.
 - Las sesiones duran siete días. Cerrar sesión elimina el registro en Firestore y vence la cookie.
 - Los datos locales se separan entre `tm_tareas_guest` y `tm_tareas_user_<id>` para que
   cerrar sesión no muestre las tareas almacenadas en caché de otra cuenta.
@@ -91,7 +91,7 @@ con el dominio exacto de la aplicación.
 - `NODE_ENV=production`
 - `CORS_ORIGIN=https://tu-dominio`
 - `FIREBASE_SERVICE_ACCOUNT_BASE64` con el JSON de Firebase codificado en base64
-- URLs OAuth con el mismo dominio HTTPS para Google, YouTube y Microsoft
+- URLs OAuth con el mismo dominio HTTPS para Google y YouTube
 - `INTEGRATION_TOKEN_KEY` base64 de 32 bytes
 
 El servidor utiliza el puerto proporcionado por `PORT`, confía en un único proxy en
@@ -122,11 +122,11 @@ OAuth está en modo de prueba, agrega cada correo permitido en **Usuarios de pru
 el mismo origen. El comando `npm start` dentro de `integraciones/` está bloqueado para evitar
 levantar accidentalmente un segundo backend.
 
-- Cada conexión Google o Microsoft pertenece al `usuario_id` autenticado.
+- Cada conexión Google o YouTube pertenece al `usuario_id` autenticado.
 - OAuth usa `state` de un solo uso y PKCE S256; el verificador se conserva diez minutos en
   Firestore y se consume durante el callback.
 - Los access y refresh tokens se cifran con AES-256-GCM antes de guardarse en Firestore.
-- Calendar, Drive, Classroom, OneDrive, Teams, email e ICS requieren sesión.
+- Calendar, Drive, Classroom, email e ICS requieren sesión.
 - Gmail solicita únicamente `gmail.send`: permite enviar desde la cuenta vinculada, pero no
   leer la bandeja de entrada. Después de incorporar este permiso, las conexiones Google
   existentes deben volver a autorizarse una vez.
@@ -134,7 +134,7 @@ levantar accidentalmente un segundo backend.
   `drive.file` y `youtube.upload` juntos. Configura `YOUTUBE_INTEGRATION_REDIRECT_URI` y registra
   esa URI en el mismo cliente web de Google Cloud.
 - Los adjuntos y registros incluyen el propietario y no aceptan tareas de otra cuenta.
-- La interfaz permite reconectar o desconectar cada proveedor. Google y YouTube intentan revocar el token remoto antes de borrar la copia cifrada; Microsoft elimina el refresh token cifrado para impedir nuevas renovaciones.
+- La interfaz permite reconectar o desconectar cada proveedor. Google y YouTube intentan revocar el token remoto antes de borrar la copia cifrada.
 
 Antes de iniciar el microservicio genera su clave de cifrado:
 
@@ -146,7 +146,13 @@ Copia el resultado en el `.env` de la raíz como `INTEGRATION_TOKEN_KEY`. Manté
 clave fuera de Git y respaldada en un gestor de secretos: si se pierde, los tokens existentes
 no podrán descifrarse y cada usuario deberá volver a conectar sus cuentas.
 
-Las versiones anteriores guardaban documentos compartidos llamados
-`int_oauth_tokens/google` e `int_oauth_tokens/microsoft`. El código nuevo no los utiliza.
-Antes de producción revoca esas autorizaciones en Google/Microsoft y elimina esos dos
-documentos antiguos de Firestore para retirar cualquier token heredado sin cifrar.
+Las versiones anteriores guardaban autorizaciones compartidas sin el aislamiento actual.
+Esos registros históricos no se utilizan. Su revisión y revocación debe realizarse
+por separado, sin borrar datos automáticamente durante un despliegue.
+
+## Alcance de servicios
+
+Desde noviembre de 2026, el paquete activo integra únicamente Google Workspace y
+YouTube. Microsoft 365 fue retirado por decisión del usuario. Los módulos históricos
+de `integraciones/` no forman parte del servidor activo. No se requieren credenciales
+de Microsoft para ejecutar TaskMaster.

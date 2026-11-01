@@ -14,7 +14,6 @@ import { rateLimit } from 'express-rate-limit';
 import { google } from 'googleapis';
 import { isTrustedOrigin } from './lib/request-origin.js';
 import { integrationStatuses } from './lib/integration-status.js';
-import { microsoftScopes } from './lib/microsoft-scopes.js';
 import { integrationFailure } from './lib/integration-errors.js';
 
 dotenv.config();
@@ -720,7 +719,6 @@ app.get('/api/integrations/status', requireAuth, async (req, res) => {
       success: true,
       google: connections.google.connected === true,
       youtube: connections.youtube.connected === true,
-      microsoft: connections.microsoft.connected === true,
       connections,
     });
   } catch (error) {
@@ -803,40 +801,9 @@ app.get('/api/integrations/google/callback', requireAuth, async (req, res) => {
   } catch (error) { console.error('GOOGLE INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=google'); }
 });
 
-app.get('/api/integrations/microsoft/start', requireAuth, async (req, res) => {
-  try {
-    integrationKey();
-    const clientId = process.env.MICROSOFT_CLIENT_ID;
-    const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
-    if (!clientId || !redirectUri || !process.env.MICROSOFT_CLIENT_SECRET) throw new Error('Microsoft OAuth no configurado.');
-    const state = randomBytes(32).toString('base64url');
-    const pkce = createPkce();
-    const accountType = req.query.account_type === 'organization' ? 'organization' : 'personal';
-    const scope = microsoftScopes(accountType);
-    await db.collection('_integration_states').doc(hashSessionToken(state)).set({ user_id: req.user.id, provider: 'microsoft', account_type: accountType, scope, code_verifier: pkce.verifier, expires_at: Date.now() + GOOGLE_STATE_TTL_MS });
-    const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query', scope, state, code_challenge: pkce.challenge, code_challenge_method: 'S256' });
-    res.redirect(`https://login.microsoftonline.com/${accountType === 'organization' ? 'organizations' : 'consumers'}/oauth2/v2.0/authorize?${params}`);
-  } catch (error) { res.redirect('/?integration_error=microsoft_config'); }
-});
-
-app.get('/api/integrations/microsoft/callback', requireAuth, async (req, res) => {
-  try {
-    const ref = db.collection('_integration_states').doc(hashSessionToken(String(req.query.state || '')));
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().provider !== 'microsoft' || Number(snap.data().user_id) !== Number(req.user.id) || snap.data().expires_at < Date.now()) throw new Error('Estado OAuth inválido.');
-    await ref.delete();
-    const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, code: req.query.code, code_verifier: snap.data().code_verifier, redirect_uri: process.env.MICROSOFT_REDIRECT_URI, grant_type: 'authorization_code', scope: snap.data().scope || microsoftScopes('organization') });
-    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const tokens = await response.json();
-    if (!response.ok) throw new Error(tokens.error_description || 'Microsoft rechazó el token.');
-    await saveIntegration(req.user.id, 'microsoft', { ...tokens, account_type: snap.data().account_type || 'organization' });
-    res.redirect('/?integration=microsoft');
-  } catch (error) { console.error('MICROSOFT INTEGRATION ERROR:', error.message); res.redirect('/?integration_error=microsoft'); }
-});
-
 app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, async (req, res) => {
   const provider = req.params.provider;
-  if (!['google', 'youtube', 'microsoft'].includes(provider)) {
+  if (!['google', 'youtube'].includes(provider)) {
     return res.status(400).json({ success: false, error: 'No reconocemos el servicio que intentas desconectar.' });
   }
 
@@ -854,8 +821,6 @@ app.delete('/api/integrations/:provider', requireTrustedOrigin, requireAuth, asy
       }
     }
 
-    // Microsoft no ofrece un endpoint universal de revocación para este flujo.
-    // Borrar el refresh token cifrado impide que TaskMaster solicite nuevos accesos.
     await integrationRef(req.user.id, provider).delete();
     res.json({ success: true });
   } catch (error) {
@@ -956,65 +921,6 @@ app.post('/api/integrations/google/gmail/send', requireTrustedOrigin, requireAut
     reportIntegrationFailure(res, error, 'Gmail');
   }
 });
-
-async function microsoftAccessToken(userId) {
-  let tokens = await readIntegration(userId, 'microsoft');
-  if (!tokens) return null;
-  if (tokens.access_token && Date.now() < Number(tokens.acquired_at || 0) + (Number(tokens.expires_in || 3600) - 120) * 1000) return tokens.access_token;
-  if (!tokens.refresh_token) throw new Error('La conexión con Microsoft caducó. Vuelve a vincularla.');
-  const body = new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, client_secret: process.env.MICROSOFT_CLIENT_SECRET, refresh_token: tokens.refresh_token, grant_type: 'refresh_token', scope: tokens.scope || microsoftScopes(tokens.account_type || 'organization') });
-  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-  const refreshed = await response.json();
-  if (!response.ok) throw Object.assign(new Error('No se pudo renovar Microsoft OAuth.'), { response: { status: response.status, data: refreshed } });
-  tokens = { ...tokens, ...refreshed };
-  await saveIntegration(userId, 'microsoft', tokens);
-  return tokens.access_token;
-}
-
-app.post('/api/integrations/microsoft/onedrive/upload', requireTrustedOrigin, requireAuth, express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
-  try {
-    const accessToken = await microsoftAccessToken(req.user.id);
-    if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
-    const safeName = decodeURIComponent(req.get('X-File-Name') || 'archivo-taskmaster').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
-    const folder = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/TaskMaster', { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (folder.status === 404) {
-      const created = await fetch('https://graph.microsoft.com/v1.0/me/drive/root/children', {
-        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'TaskMaster', folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
-      });
-      if (!created.ok && created.status !== 409) throw new Error('No se pudo preparar la carpeta TaskMaster en OneDrive.');
-    } else if (!folder.ok) throw new Error('No se pudo acceder a OneDrive.');
-    const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/TaskMaster/${encodeURIComponent(safeName)}:/content`, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': req.get('X-File-Type') || 'application/octet-stream' }, body: req.body });
-    const data = await response.json();
-    if (!response.ok) throw Object.assign(new Error('Microsoft Graph rechazó el archivo.'), { status: response.status });
-    res.json({ success: true, file: { id: data.id, name: data.name, webUrl: data.webUrl } });
-  } catch (error) { reportIntegrationFailure(res, error, 'OneDrive'); }
-});
-
-async function microsoftGraph(req, res, resource, resultKey) {
-  try {
-    if (resultKey === 'teams') {
-      const tokens = await readIntegration(req.user.id, 'microsoft');
-      if (tokens?.account_type === 'personal') return res.status(422).json({ success: false, error: 'Para consultar Teams dentro de TaskMaster necesitas una cuenta de trabajo o estudio. También puedes abrir Teams directamente.' });
-    }
-    const accessToken = await microsoftAccessToken(req.user.id);
-    if (!accessToken) return res.status(409).json({ success: false, error: 'Conecta Microsoft primero.' });
-    const response = await fetch(`https://graph.microsoft.com/v1.0/${resource}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    const data = await response.json();
-    if (!response.ok) throw Object.assign(new Error('Microsoft Graph rechazó la solicitud.'), { status: response.status });
-    res.json({ success: true, [resultKey]: data.value || [] });
-  } catch (error) {
-    reportIntegrationFailure(res, error, resultKey === 'teams' ? 'Microsoft Teams' : 'Calendario de Microsoft');
-  }
-}
-
-app.get('/api/integrations/microsoft/calendar/events', requireAuth, (req, res) =>
-  microsoftGraph(req, res, 'me/calendar/events?$top=50&$orderby=start/dateTime', 'events'));
-
-app.get('/api/integrations/microsoft/teams', requireAuth, (req, res) =>
-  microsoftGraph(req, res, 'me/joinedTeams', 'teams'));
-
-// ── Notificaciones ───────────────────────────────────────────────────────
 
 app.post('/api/notify', requireTrustedOrigin, requireAuth, async (req, res) => {
   try {

@@ -3,16 +3,13 @@ class IntegrationView {
     this.app = app;
     this.google = document.getElementById('connect-google');
     this.youtube = document.getElementById('connect-youtube');
-    this.microsoft = document.getElementById('connect-microsoft');
     this.gmail = document.getElementById('use-gmail');
     this.gmailCompose = document.getElementById('gmail-compose');
 
     this.google?.addEventListener('click', () => this.connect('google'));
     this.youtube?.addEventListener('click', () => this.connect('youtube'));
-    this.microsoft?.addEventListener('click', () => this.connect('microsoft'));
     document.getElementById('disconnect-google')?.addEventListener('click', () => this.disconnect('google'));
     document.getElementById('disconnect-youtube')?.addEventListener('click', () => this.disconnect('youtube'));
-    document.getElementById('disconnect-microsoft')?.addEventListener('click', () => this.disconnect('microsoft'));
     this.gmail?.addEventListener('click', () => this.openGmailComposer());
     this.gmailCompose?.addEventListener('submit', event => this.sendGmail(event));
     document.getElementById('close-gmail-compose')?.addEventListener('click', () => this.closeGmailComposer());
@@ -22,14 +19,15 @@ class IntegrationView {
   }
 
   _providerButton(provider) {
-    return { google: this.google, youtube: this.youtube, microsoft: this.microsoft }[provider];
+    return { google: this.google, youtube: this.youtube }[provider];
   }
 
   _providerName(provider) {
-    return { google: 'Google Workspace', youtube: 'YouTube', microsoft: 'Microsoft 365' }[provider] || provider;
+    return { google: 'Google Workspace', youtube: 'YouTube' }[provider] || provider;
   }
 
   connect(provider) {
+    if (!['google', 'youtube'].includes(provider)) return;
     if (this.app.accessMode !== 'authenticated') {
       this.app.showToast('Inicia sesión para vincular este servicio.', 'warning');
       return this.app.authView.openMode('login');
@@ -40,11 +38,11 @@ class IntegrationView {
       button.setAttribute('aria-busy', 'true');
       button.textContent = `Abriendo ${this._providerName(provider)}…`;
     }
-    const accountType = document.getElementById('microsoft-account-type')?.value || 'personal';
-    window.location.assign(`/api/integrations/${provider}/start${provider === 'microsoft' ? `?account_type=${encodeURIComponent(accountType)}` : ''}`);
+    window.location.assign(`/api/integrations/${provider}/start`);
   }
 
   async disconnect(provider) {
+    if (!['google', 'youtube'].includes(provider)) return;
     if (this.app.accessMode !== 'authenticated') {
       this.app.showToast('Tu sesión terminó. Inicia sesión nuevamente.', 'warning');
       return this.app.authView.openMode('login');
@@ -95,14 +93,13 @@ class IntegrationView {
         headers: { Accept: 'application/json' },
       }, 'integration');
 
-      for (const provider of ['google', 'youtube', 'microsoft']) {
+      for (const provider of ['google', 'youtube']) {
         const connection = data.connections?.[provider];
         this._render(provider, connection ? connection.connected === true : Boolean(data[provider]), connection?.state);
       }
       this._renderService('drive', Boolean(data.google));
       this._renderService('classroom', Boolean(data.google));
       this._renderService('gmail', Boolean(data.google));
-      this._renderService('teams', Boolean(data.microsoft));
       document.querySelectorAll('[data-integration-query]').forEach(button => {
         button.disabled = !data[button.dataset.provider];
       });
@@ -111,7 +108,7 @@ class IntegrationView {
       const needsAttention = Object.values(data.connections || {}).some(connection => ['unavailable', 'reconnect'].includes(connection.state));
       if (notice) notice.textContent = needsAttention
         ? 'Una o más conexiones necesitan revisión. Las demás se muestran por separado. Si la conexión no se puede comprobar, inténtalo más tarde; si caducó, vuelve a vincularla.'
-        : data.google || data.youtube || data.microsoft
+        : data.google || data.youtube
         ? 'Estas cuentas están vinculadas. Si una función pide permisos adicionales, vuelve a autorizar esa cuenta.'
         : 'Todavía no has vinculado servicios. Puedes abrirlos directamente o vincularlos para trabajar desde TaskMaster.';
     } catch (error) {
@@ -121,7 +118,7 @@ class IntegrationView {
         if (notice) notice.textContent = 'Tu sesión terminó. Inicia sesión nuevamente para consultar tus conexiones.';
         return;
       }
-      for (const provider of ['google', 'youtube', 'microsoft']) this._render(provider, false, 'unavailable');
+      for (const provider of ['google', 'youtube']) this._render(provider, false, 'unavailable');
       document.querySelectorAll('[data-integration-query]').forEach(button => { button.disabled = true; });
       this.closeGmailComposer();
       if (this.gmail) this.gmail.disabled = true;
@@ -133,11 +130,9 @@ class IntegrationView {
   _reset() {
     this._render('google', false);
     this._render('youtube', false);
-    this._render('microsoft', false);
     this._renderService('drive', false);
     this._renderService('classroom', false);
     this._renderService('gmail', false);
-    this._renderService('teams', false);
     this.closeGmailComposer();
     document.querySelectorAll('[data-integration-query]').forEach(button => { button.disabled = true; });
     const results = document.getElementById('integration-results');
@@ -240,8 +235,6 @@ class IntegrationView {
     const services = {
       calendar: { route: '/api/integrations/google/calendar/events', key: 'events', name: 'Google Calendar' },
       classroom: { route: '/api/integrations/google/classroom/courses', key: 'courses', name: 'Google Classroom' },
-      microsoft_calendar: { route: '/api/integrations/microsoft/calendar/events', key: 'events', name: 'Calendario de Microsoft' },
-      teams: { route: '/api/integrations/microsoft/teams', key: 'teams', name: 'Microsoft Teams' }
     };
     const service = services[button.dataset.integrationQuery];
     if (!service || button.disabled) return;

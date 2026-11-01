@@ -196,9 +196,6 @@ class AuthView {
     } else if (params.get('integration') === 'google') {
       this.app.showToast('Google Workspace conectado', 'success');
       this.app.integrationView?.refresh();
-    } else if (params.get('integration') === 'microsoft') {
-      this.app.showToast('Microsoft 365 conectado', 'success');
-      this.app.integrationView?.refresh();
     } else if (params.get('integration') === 'youtube') {
       this.app.showToast('YouTube conectado', 'success');
       this.app.integrationView?.refresh();
@@ -208,7 +205,7 @@ class AuthView {
       this.app.showToast('No se completó el acceso con Google. Vuelve a intentarlo y completa la autorización.', 'error');
     } else if (params.get('integration_error')) {
       const provider = params.get('integration_error').split('_')[0];
-      const name = { google: 'Google Workspace', microsoft: 'Microsoft 365', youtube: 'YouTube' }[provider] || 'el servicio';
+      const name = { google: 'Google Workspace', youtube: 'YouTube' }[provider] || 'el servicio';
       const message = params.get('integration_error').endsWith('_config')
         ? `La conexión con ${name} no está disponible en este momento. Puedes abrir su aplicación oficial e intentarlo más tarde.`
         : `No se completó la conexión con ${name}. Vuelve a vincular tu cuenta y completa la autorización.`;

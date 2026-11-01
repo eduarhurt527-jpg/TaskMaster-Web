@@ -5,14 +5,12 @@ class FileWorkspaceView {
     this.list = document.getElementById('workspace-file-list');
     this.clearButton = document.getElementById('clear-workspace-files');
     this.driveButton = document.getElementById('upload-drive');
-    this.oneDriveButton = document.getElementById('upload-onedrive');
     this.createDocButton = document.getElementById('create-google-doc');
     this.docTitle = document.getElementById('google-doc-title');
     this.docForm = document.getElementById('google-doc-form');
     this.input?.addEventListener('change', () => this.render());
     this.clearButton?.addEventListener('click', () => this.clear());
     this.driveButton?.addEventListener('click', () => this.upload('google/drive'));
-    this.oneDriveButton?.addEventListener('click', () => this.upload('microsoft/onedrive'));
     this.docForm?.addEventListener('submit', event => {
       event.preventDefault();
       this.createGoogleDoc();
@@ -23,7 +21,6 @@ class FileWorkspaceView {
     const files = [...(this.input?.files || [])];
     this.clearButton.disabled = files.length === 0;
     this.driveButton.disabled = files.length === 0;
-    this.oneDriveButton.disabled = files.length === 0;
     if (!files.length) {
       this.list.innerHTML = '<li class="file-empty">Todavía no has seleccionado archivos.</li>';
       return;
@@ -42,10 +39,9 @@ class FileWorkspaceView {
     if (this.app.accessMode !== 'authenticated') return this.app.authView.openMode('login');
     const files = [...this.input.files];
     if (!files.length) return this.app.showToast('Selecciona al menos un archivo para subir.', 'info');
-    if (files.some(file => file.size > 4 * 1024 * 1024)) return this.app.showToast('Selecciona archivos de hasta 4 MB para subir desde TaskMaster. Para archivos mayores, usa Drive o OneDrive directamente.', 'warning');
+    if (files.some(file => file.size > 4 * 1024 * 1024)) return this.app.showToast('Selecciona archivos de hasta 4 MB para subir desde TaskMaster. Para archivos mayores, usa Google Drive directamente.', 'warning');
     this._uploading = true;
     this.driveButton.disabled = true;
-    this.oneDriveButton.disabled = true;
     let uploaded = 0;
     try {
     for (const file of files) {

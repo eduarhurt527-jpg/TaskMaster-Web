@@ -19,7 +19,8 @@ test('el backend principal aplica sesión segura, bcrypt, CORS y límites', asyn
 test('OAuth usa state, PKCE S256, tokens cifrados y revocación', async () => {
   const server = await read('../server.js');
   assert.match(server, /code_challenge_method: 'S256'/);
-  assert.match(server, /code_verifier: snap\.data\(\)\.code_verifier/);
+  assert.match(server, /codeVerifier: snap\.data\(\)\.code_verifier/);
+  assert.doesNotMatch(server, /microsoft|MICROSOFT|onedrive|joinedTeams/);
   assert.match(server, /createCipheriv\('aes-256-gcm'/);
   assert.match(server, /revokeToken\(token\)/);
   assert.match(server, /integrationRef\(req\.user\.id, provider\)\.delete/);
@@ -35,7 +36,6 @@ test('las rutas privadas derivan el propietario de la sesión', async () => {
   assert.match(server, /req\.user\.id/);
   assert.match(server, /\/api\/integrations\/google\/calendar\/events/);
   assert.match(server, /\/api\/integrations\/google\/classroom\/courses/);
-  assert.match(server, /\/api\/integrations\/microsoft\/teams/);
   assert.match(server, /\/api\/integrations\/google\/gmail\/send/);
   assert.match(server, /google\.gmail\(\{ version: 'v1'/);
   assert.match(server, /https:\/\/www\.googleapis\.com\/auth\/gmail\.send/);
@@ -56,25 +56,25 @@ test('las integraciones implementadas no se presentan como próximas', async () 
   const index = await read('../index.html');
   const integrationView = await read('../assets/js/view/IntegrationView.js');
   const authView = await read('../assets/js/view/AuthView.js');
-  for (const id of ['drive-status', 'classroom-status', 'youtube-status', 'teams-status']) {
+  for (const id of ['drive-status', 'classroom-status', 'youtube-status']) {
     assert.match(index, new RegExp(`id="${id}"`));
   }
   assert.match(integrationView, /_renderService\('drive', Boolean\(data\.google\)\)/);
   assert.match(index, /https:\/\/drive\.google\.com\/drive\/my-drive/);
   assert.match(index, /https:\/\/classroom\.google\.com\//);
   assert.match(index, /https:\/\/mail\.google\.com\//);
-  assert.match(index, /https:\/\/teams\.microsoft\.com\//);
   assert.match(index, /id="gmail-compose"/);
   assert.match(integrationView, /google\/gmail\/send/);
   assert.match(integrationView, /_renderService\('gmail', Boolean\(data\.google\)\)/);
-  assert.match(integrationView, /\['google', 'youtube', 'microsoft'\]/);
   assert.match(index, /id="connect-youtube"/);
+  assert.doesNotMatch(index, /Microsoft|OneDrive|Teams|upload-onedrive/);
+  assert.doesNotMatch(integrationView, /microsoft|onedrive|teams/);
+  assert.match(integrationView, /\['google', 'youtube'\]/);
   assert.match(index, /Cómo funcionan las integraciones/);
   assert.match(index, /aria-live="polite"/);
   assert.match(integrationView, /Abriendo \$\{this\._providerName\(provider\)\}/);
   assert.match(authView, /params\.get\('integration'\)/);
   assert.match(authView, /Google Workspace conectado/);
-  assert.match(authView, /Microsoft 365 conectado/);
   assert.match(authView, /YouTube conectado/);
 });
 

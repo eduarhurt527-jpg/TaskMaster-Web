@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { integrationStatuses } from '../lib/integration-status.js';
-import { microsoftScopes } from '../lib/microsoft-scopes.js';
 import { integrationFailure } from '../lib/integration-errors.js';
 
 const apiSource = await readFile(new URL('../assets/js/ApiClient.js', import.meta.url), 'utf8');
@@ -20,11 +19,11 @@ function response(status, body, type = 'application/json') {
 test('una conexión indescifrable no oculta las demás y pide volver a vincular', async () => {
   const result = await integrationStatuses(async provider => {
     if (provider === 'google') throw new Error('Unsupported state or unable to authenticate data');
-    return provider === 'microsoft' ? {access_token:'unit-test-only'} : null;
+    return provider === 'youtube' ? {access_token:'unit-test-only'} : null;
   });
   assert.deepEqual(result.google, {connected:false,state:'reconnect'});
-  assert.deepEqual(result.youtube, {connected:false,state:'disconnected'});
-  assert.deepEqual(result.microsoft, {connected:true,state:'linked'});
+  assert.deepEqual(Object.keys(result).sort(), ['google', 'youtube']);
+  assert.deepEqual(result.youtube, {connected:true,state:'linked'});
 });
 test('un error de almacenamiento indica estado desconocido, no cuenta desvinculada', async () => {
   const result = await integrationStatuses(async () => {throw new Error('Storage unavailable');});
@@ -66,8 +65,8 @@ test('un fallo de subida libera los botones y no muestra éxito falso', async ()
   const view=Object.create(context.FileView.prototype);
   view.app={accessMode:'authenticated',showToast:(message,kind)=>notices.push({message,kind})};
   view.input={files:[{name:'archivo-unidad.txt',size:10,type:'text/plain'}]};
-  view.driveButton={disabled:false};view.oneDriveButton={disabled:false};
-  view.render=()=>{view.driveButton.disabled=false;view.oneDriveButton.disabled=false;};
+  view.driveButton={disabled:false};
+  view.render=()=>{view.driveButton.disabled=false;};
   await view.upload('google/drive');
   assert.equal(view._uploading,false);assert.equal(view.driveButton.disabled,false);
   assert.equal(notices.some(n=>n.kind==='success'),false);assert.equal(notices.at(-1).kind,'error');
@@ -81,10 +80,6 @@ test('archivos mayores del límite no se envían al servidor', async () => {
   view.input={files:[{name:'grande.txt',size:5*1024*1024}]};
   await view.upload('google/drive');
   assert.match(notices[0].message,/4 MB/);assert.equal(notices[0].kind,'warning');
-});
-test('Microsoft personal no solicita permisos de Teams y la cuenta de organización sí', () => {
-  assert.doesNotMatch(microsoftScopes('personal'), /Team/);
-  assert.match(microsoftScopes('organization'), /Team.ReadBasic.All/);
 });
 test('los permisos revocados requieren volver a vincular, no volver a iniciar sesión en TaskMaster', () => {
   const error = {response:{status:400,data:{error:'invalid_grant'}}};
