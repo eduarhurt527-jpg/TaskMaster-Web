@@ -152,13 +152,20 @@ class TaskViewModel {
   /** Registra un Pomodoro completado en la tarea activa */
   async registrarPomodoro(id) {
     const tarea = this._state.tareas.find(t => t.id === id);
-    if (!tarea) return;
-    const real = (tarea.pomodoros_real || 0) + 1;
-    await this._model.update(id, { pomodoros_real: real });
+    if (!tarea) return { success: false, error: 'La tarea ya no está disponible.' };
+    const real = (Number(tarea.pomodoros_real) || 0) + 1;
+    let resultado;
+    try {
+      resultado = await this._model.update(id, { pomodoros_real: real });
+    } catch {
+      return { success: false, error: 'No se pudo guardar la sesión. Comprueba tu conexión e inténtalo de nuevo.' };
+    }
+    if (!resultado?.success) return resultado || { success: false, error: 'No se pudo guardar la sesión.' };
     this._state.tareas = this._state.tareas.map(t =>
       t.id === id ? { ...t, pomodoros_real: real } : t
     );
     this._notify('pomodoroRegistrado');
+    return { success: true, pomodoros_real: real };
   }
 
   /** Cambia el filtro de materia */
@@ -186,8 +193,8 @@ class TaskViewModel {
     const porDia    = this._model.agruparPorDia(tareas);
     const categorias = this.getGeneralCategories();
 
-    // Pomodoros totales esta semana
-    const pomHoy    = tareas.reduce((s, t) => s + (t.pomodoros_real || 0), 0);
+    // Los registros actuales solo conservan el total, sin fechas de cada sesión.
+    const pomTotal = tareas.reduce((s, t) => s + (Number(t.pomodoros_real) || 0), 0);
 
     // Avance por categoría general
     const avanceCategorias = categorias.map(c => {
@@ -198,7 +205,7 @@ class TaskViewModel {
       return { categoria: c, pct: Math.round((hechas / cTareas.length) * 100) };
     }).filter(Boolean);
 
-    return { porDia, pomHoy, avanceCategorias, categorias };
+    return { porDia, pomTotal, avanceCategorias, categorias };
   }
 
   // ── Utilidades de presentación (cálculos sin DOM) ─────────────────────────

@@ -48,6 +48,7 @@ async function actualizarEstadoCuentas() {
 function marcarCuenta(proveedor, conectado) {
   const estadoEl = document.getElementById(`estado-${proveedor}`);
   const btnEl = document.getElementById(`btn-conectar-${proveedor}`);
+  const disconnectEl = document.getElementById(`btn-desconectar-${proveedor}`);
   if (conectado) {
     estadoEl.textContent = '✅ Conectado';
     estadoEl.className = 'cuenta__estado cuenta__estado--ok';
@@ -57,10 +58,29 @@ function marcarCuenta(proveedor, conectado) {
     estadoEl.className = 'cuenta__estado';
     btnEl.textContent = 'Conectar';
   }
+  if (disconnectEl) disconnectEl.hidden = !conectado;
   document.querySelectorAll(`[data-requiere="${proveedor}"]`).forEach(card => {
     card.classList.toggle('habilitada', conectado);
   });
 }
+
+['google', 'microsoft'].forEach(proveedor => {
+  document.getElementById(`btn-desconectar-${proveedor}`)?.addEventListener('click', async () => {
+    try {
+      const res = await fetch(`/api/${proveedor}/desconectar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'No se pudo desconectar.');
+      await actualizarEstadoCuentas();
+    } catch (error) {
+      $statusEl.textContent = `❌ ${error.message}`;
+      $statusEl.className = 'status status--error';
+    }
+  });
+});
 
 function mostrarResultado(id, ok, mensaje) {
   const el = document.getElementById(id);

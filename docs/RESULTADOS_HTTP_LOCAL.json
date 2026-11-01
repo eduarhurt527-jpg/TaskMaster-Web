@@ -1,0 +1,32 @@
+[
+  {
+    "prueba": "WWW acepta sesión y devuelve JSON 401 sin cookie",
+    "estado": 401,
+    "milisegundos": 65,
+    "resultado": "OK"
+  },
+  {
+    "prueba": "Origen externo autorizado conserva JSON 401",
+    "estado": 401,
+    "milisegundos": 7,
+    "resultado": "OK"
+  },
+  {
+    "prueba": "Origen ajeno rechazado con JSON 403",
+    "estado": 403,
+    "milisegundos": 3,
+    "resultado": "OK"
+  },
+  {
+    "prueba": "JSON corrupto devuelve JSON 400",
+    "estado": 400,
+    "milisegundos": 5,
+    "resultado": "OK"
+  },
+  {
+    "prueba": "API ausente devuelve JSON 404",
+    "estado": 404,
+    "milisegundos": 14,
+    "resultado": "OK"
+  }
+]

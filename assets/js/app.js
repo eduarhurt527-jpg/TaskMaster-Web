@@ -7,21 +7,29 @@
 class App {
 
   constructor() {
+    // Elimina el perfil que versiones anteriores dejaban permanentemente en el navegador.
+    localStorage.removeItem('tm_user');
+    localStorage.removeItem('tm_access_mode');
+    this.user = null;
+    this.accessMode = sessionStorage.getItem('tm_access_mode') === 'guest' ? 'guest' : 'public';
+    this.screen = 'public';
     // Instanciar Views
     this.homeView      = new HomeView(taskViewModel);
     this.dashboardView = new DashboardView(taskViewModel);
     this.modalView     = new ModalView(taskViewModel);
     this.pomodoroView  = new PomodoroView(taskViewModel);
     this.authView      = new AuthView(this);
-
-    this.user = null;
+    this.recordingView = new RecordingView(this);
+    this.fileWorkspaceView = new FileWorkspaceView(this);
+    this.integrationView = new IntegrationView(this);
 
     this._vistaActual  = 'home';
 
     this._taskExpirationNotified = new Set();
     this._bindGlobalEvents();
     this._subscribirViewModel();
-    this._solicitarPermisoNotificaciones();
+    // El permiso de notificaciones se solicita al entrar al espacio de trabajo,
+    // después de una acción explícita, no al abrir la portada pública.
     this._iniciar();
     this._startTaskTimers();
   }
@@ -163,16 +171,33 @@ class App {
         this._cambiarVista(vista);
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        if (btn.dataset.scroll) {
+          window.setTimeout(() => document.getElementById(btn.dataset.scroll)?.scrollIntoView({ behavior: 'smooth' }), 0);
+        }
       });
+    });
+
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    if (sidebarToggle) sidebarToggle.addEventListener('click', () => {
+      const collapsed = document.body.classList.toggle('sidebar-collapsed');
+      sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+      sidebarToggle.setAttribute('aria-label', collapsed ? 'Expandir menú' : 'Contraer menú');
+    });
+    const sidebarLogout = document.getElementById('sidebar-logout');
+    if (sidebarLogout) sidebarLogout.addEventListener('click', () => {
+      if (this.accessMode === 'authenticated') this.authView.logout();
+      else this.exitGuest();
     });
 
     // FAB: abrir modal nueva tarea
     const btnNew = document.getElementById('btn-nueva-tarea');
     if (btnNew) btnNew.addEventListener('click', () => {
+      if (!this._canUseWorkspace()) return this._requestAccess();
       this.modalView.abrirNueva();
     });
     const btnFab = document.getElementById('btn-fab-nueva-tarea');
     if (btnFab) btnFab.addEventListener('click', () => {
+      if (!this._canUseWorkspace()) return this._requestAccess();
       this.modalView.abrirNueva();
     });
 
@@ -181,18 +206,58 @@ class App {
     if (btnLogin) btnLogin.addEventListener('click', () => this.authView.openMode('login'));
     const btnReg = document.getElementById('btn-registrarse');
     if (btnReg) btnReg.addEventListener('click', () => this.authView.openMode('register'));
+    const publicLogin = document.getElementById('btn-public-login');
+    if (publicLogin) publicLogin.addEventListener('click', () => this.authView.openMode('login'));
+    const publicRegister = document.getElementById('btn-public-register');
+    if (publicRegister) publicRegister.addEventListener('click', () => this.authView.openMode('register'));
     const btnHeroReg = document.getElementById('btn-hero-registrarse');
     if (btnHeroReg) btnHeroReg.addEventListener('click', () => this.authView.openMode('register'));
     const btnGoogle = document.getElementById('btn-google-login');
     if (btnGoogle) btnGoogle.addEventListener('click', () => this.authView.loginWithProvider('google'));
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) btnLogout.addEventListener('click', () => this.authView.logout());
+    document.querySelectorAll('[data-action="guest"]').forEach(btn => {
+      btn.addEventListener('click', () => this.enterGuest());
+    });
+    document.querySelectorAll('[data-action="public"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        // La portada es siempre anónima: salir desde el panel también revoca la sesión.
+        if (this.accessMode === 'authenticated') this.authView.logout();
+        else this.showPublic();
+      });
+    });
+    document.querySelectorAll('[data-requires-account]').forEach(el => {
+      el.addEventListener('click', event => {
+        if (this.accessMode === 'authenticated') return;
+        event.preventDefault();
+        this.showToast('Esta función necesita una cuenta para mantener tus datos e integraciones protegidos.', 'warning');
+      });
+    });
+    const manageConnections = document.getElementById('btn-manage-connections');
+    if (manageConnections) manageConnections.addEventListener('click', () => {
+      if (this.accessMode !== 'authenticated') {
+        this.showToast('Inicia sesión o crea una cuenta para administrar conexiones.', 'warning');
+        this.authView.openMode('login');
+        return;
+      }
+      this._cambiarVista('integrations');
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector('.nav-btn[data-view="integrations"]')?.classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     const btnCarga = document.getElementById('btn-carga-semanal');
     if (btnCarga) btnCarga.addEventListener('click', () => {
       this._cambiarVista('overview');
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const nav = document.querySelector('.nav-btn[data-view="overview"]'); if (nav) nav.classList.add('active');
     });
+    const contactForm = document.getElementById('contact-form');
+    if (contactForm) contactForm.addEventListener('submit', event => {
+      event.preventDefault();
+      this.showToast('Formulario listo para conectar con el canal de contacto.', 'info');
+    });
+    const year = document.getElementById('current-year');
+    if (year) year.textContent = String(new Date().getFullYear());
 
     // Teclado: ESC cierra modales
     document.addEventListener('keydown', e => {
@@ -214,11 +279,23 @@ class App {
 
     if (vista === 'overview') this.dashboardView.render();
     if (vista === 'home')      this.homeView.render();
+    if (vista === 'integrations') this.integrationView?.refresh();
   }
 
 
   setUser(user) {
     this.user = user;
+    if (user) {
+      this.accessMode = 'authenticated';
+      sessionStorage.setItem('tm_access_mode', 'authenticated');
+    } else if (sessionStorage.getItem('tm_access_mode') === 'guest') {
+      this.accessMode = 'guest';
+    } else {
+      this.accessMode = 'public';
+      sessionStorage.removeItem('tm_access_mode');
+    }
+    this._applyAccessState();
+    if (this.accessMode !== 'authenticated') this.integrationView?._reset();
     const el = document.getElementById('header-welcome');
     if (el) el.textContent = user && user.nombre ? `Hola, ${user.nombre}` : 'Bienvenido';
 
@@ -230,8 +307,80 @@ class App {
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) btnLogout.style.display = user ? '' : 'none';
 
-    const hero = document.getElementById('hero-landing');
-    if (hero) hero.style.display = user ? 'none' : '';
+  }
+
+  _canUseWorkspace() {
+    return this.accessMode === 'guest' || this.accessMode === 'authenticated';
+  }
+
+  _requestAccess() {
+    this.showToast('Inicia sesión, regístrate o continúa como invitado.', 'info');
+    this.authView.openMode('login');
+  }
+
+  async enterGuest() {
+    this.user = null;
+    this.accessMode = 'guest';
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.setItem('tm_access_mode', 'guest');
+    this.screen = 'workspace';
+    this._applyAccessState();
+    await taskViewModel.cargarTareas();
+    this.homeView.render();
+    this._solicitarPermisoNotificaciones();
+    this.showToast('Estás usando TaskMaster como invitado', 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  showPublic() {
+    this.recordingView?.cleanupStream();
+    this.screen = 'public';
+    const url = new URL(window.location.href);
+    url.searchParams.delete('workspace');
+    window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    this._applyAccessState();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  exitGuest() {
+    sessionStorage.removeItem('tm_user');
+    sessionStorage.removeItem('tm_access_mode');
+    this.user = null;
+    this.accessMode = 'public';
+    this.showPublic();
+  }
+
+  enterWorkspace() {
+    if (!this._canUseWorkspace()) return this._requestAccess();
+    this.screen = 'workspace';
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace', '1');
+    window.history.replaceState({}, '', url.pathname + `?${url.searchParams.toString()}`);
+    this._applyAccessState();
+    this._solicitarPermisoNotificaciones();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  _applyAccessState() {
+    // Una pantalla de trabajo nunca puede permanecer abierta sin invitado o cuenta.
+    if (!this._canUseWorkspace()) this.screen = 'public';
+    document.body.dataset.access = this.accessMode;
+    document.body.dataset.screen = this.screen;
+    const badge = document.getElementById('access-badge');
+    if (badge) {
+      badge.textContent = this.accessMode === 'guest' ? 'Modo invitado' : 'Cuenta sincronizada';
+      badge.className = `access-badge access-badge--${this.accessMode}`;
+    }
+    document.querySelectorAll('[data-auth-only]').forEach(el => {
+      el.classList.toggle('is-locked', this.accessMode !== 'authenticated');
+      el.setAttribute('aria-disabled', String(this.accessMode !== 'authenticated'));
+    });
+    const publicLogin = document.getElementById('btn-public-login');
+    const publicRegister = document.getElementById('btn-public-register');
+    // La portada nunca presenta accesos al espacio privado. Al volver desde el
+    // panel, la sesión se revoca antes de mostrar estas dos acciones públicas.
+    if (publicLogin) publicLogin.hidden = false;
+    if (publicRegister) publicRegister.hidden = false;
   }
 
   _updateCountdown() {
@@ -264,8 +413,13 @@ class App {
   // ── Inicialización ────────────────────────────────────────────────────────
 
   async _iniciar() {
+    // Resolver primero la sesión evita renderizar la portada y reemplazarla
+    // inmediatamente por el panel (parpadeo o layout shift).
+    await this.authView.ready;
+    this._applyAccessState();
     await taskViewModel.cargarTareas();
     this.homeView.render();
+    document.body.setAttribute('aria-busy', 'false');
   }
 
   // ── Toast global ──────────────────────────────────────────────────────────

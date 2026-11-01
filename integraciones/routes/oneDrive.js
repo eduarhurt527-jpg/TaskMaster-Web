@@ -17,7 +17,17 @@ router.post('/api/microsoft/onedrive/vincular', async (req, res) => {
     const { tarea_id, url } = req.body;
     if (!tarea_id || !url) return res.status(400).json({ success: false, error: 'tarea_id y url son obligatorios.' });
 
-    const accessToken = await obtenerAccessToken();
+    const base = process.env.MAIN_API_URL || 'http://localhost:3000';
+    const taskResponse = await fetch(`${base}/api/tareas`, {
+      headers: { Cookie: req.headers.cookie || '' },
+    });
+    const taskData = await taskResponse.json();
+    const ownsTask = (taskData.tareas || []).some(t => Number(t.id) === Number(tarea_id));
+    if (!taskResponse.ok || !ownsTask) {
+      return res.status(404).json({ success: false, error: 'Tarea no encontrada para este usuario.' });
+    }
+
+    const accessToken = await obtenerAccessToken(req.user.id);
     const shareId = codificarShareId(url);
 
     const gres = await fetch(
@@ -29,6 +39,7 @@ router.post('/api/microsoft/onedrive/vincular', async (req, res) => {
 
     const adjunto = {
       tarea_id: Number(tarea_id),
+      usuario_id: Number(req.user.id),
       proveedor: 'onedrive',
       nombre: gdata.name,
       url: gdata.webUrl,

@@ -121,7 +121,7 @@ class HomeView {
     if (!tareas.length) {
       this.$taskList.innerHTML = `
         <div class="empty-state">
-          <img src="assets/img/empty-state.jpg" alt="Sin tareas pendientes" class="empty-state__photo" />
+          <img src="assets/img/illustrations/empty-tasks.svg" alt="Lista preparada para crear una tarea" class="empty-state__photo" width="360" height="220" />
           <p class="empty-state__text">No hay tareas. ¡Toca + para agregar una!</p>
         </div>`;
       return;

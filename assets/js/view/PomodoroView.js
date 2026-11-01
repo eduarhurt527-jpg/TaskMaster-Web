@@ -94,14 +94,38 @@ class PomodoroView {
   }
 
   async _completarSesion() {
+    if (this._guardando) return;
     clearInterval(this._intervalo);
     this._corriendo = false;
     this.$btnToggle.classList.remove('running');
 
-    // Registrar en el ViewModel
+    // El descanso no constituye otra sesión de trabajo.
+    if (this._duracionActual !== this._duracion) {
+      this.reset();
+      return;
+    }
+    this._guardando = true;
+    this.$btnToggle.disabled = this.$btnReset.disabled = this.$btnSkip.disabled = true;
+    const tareaId = this._tareaId;
+    let resultado;
+    try {
+      resultado = tareaId ? await this._vm.registrarPomodoro(tareaId) : { success: false };
+    } catch {
+      resultado = { success: false, error: 'No se pudo guardar la sesión. Inténtalo de nuevo.' };
+    } finally {
+      this._guardando = false;
+      this.$btnToggle.disabled = this.$btnReset.disabled = this.$btnSkip.disabled = false;
+    }
+    if (tareaId !== this._tareaId) return;
+    if (!resultado?.success) {
+      this.$label.textContent = 'Sesión sin guardar';
+      this.$btnToggle.textContent = '▶';
+      app.showToast(resultado?.error || 'No se pudo guardar la sesión. Inténtalo de nuevo.', 'error');
+      return;
+    }
+    // Incrementar únicamente después de confirmar el guardado.
     if (this._tareaId) {
-      await this._vm.registrarPomodoro(this._tareaId);
-      this._sesionAct++;
+      this._sesionAct = resultado.pomodoros_real;
     }
 
     // Notificación del navegador
